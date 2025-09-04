@@ -3,6 +3,11 @@ import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleShee
 import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/AuthProvider';
+import * as ImagePicker from 'expo-image-picker';
+import { Image } from 'expo-image';
+import * as ImageManipulator from 'expo-image-manipulator';
+import * as FileSystem from 'expo-file-system';
+import { decode } from 'base64-arraybuffer';
 
 export default function AddCatchScreen() {
   const router = useRouter();
@@ -13,7 +18,95 @@ export default function AddCatchScreen() {
   const [length, setLength] = React.useState('');
   const [notes, setNotes] = React.useState('');
   const [loading, setLoading] = React.useState(false);
+  const [image, setImage] = React.useState<ImagePicker.ImagePickerAsset | null>(null);
 
+  // ---- Permissions ----
+  const ensureLibraryPermission = React.useCallback(async () => {
+    const current = await ImagePicker.getMediaLibraryPermissionsAsync();
+    if (current.granted || (Platform.OS === 'ios' && (current as any).accessPrivileges === 'limited')) return true;
+    const req = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (req.granted || (Platform.OS === 'ios' && (req as any).accessPrivileges === 'limited')) return true;
+    Alert.alert('Permission requise', "Autorise l'accès à la photothèque pour sélectionner une image.");
+    return false;
+  }, []);
+
+  const requestCameraPermission = React.useCallback(async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission requise', "Autorise l'accès à la caméra pour prendre une photo.");
+      return false;
+    }
+    return true;
+  }, []);
+
+  // ---- Sélection / Prise de photo ----
+  const onPickImage = React.useCallback(async () => {
+    const ok = await ensureLibraryPermission();
+    if (!ok) return;
+    const res = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'], // expo-image-picker >=16
+      allowsEditing: true,
+      quality: 0.85,
+    });
+    if (!res.canceled) setImage(res.assets[0]);
+  }, [ensureLibraryPermission]);
+
+  const onTakePhoto = React.useCallback(async () => {
+    const ok = await requestCameraPermission();
+    if (!ok) return;
+    const res = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      quality: 0.85,
+    });
+    if (!res.canceled) setImage(res.assets[0]);
+  }, [requestCameraPermission]);
+
+  // ---- Helpers ----
+  const prepareImageForUpload = async (asset: ImagePicker.ImagePickerAsset) => {
+    // 🔒 Normalise TOUT en JPEG pour garantir un fichier local file:// lisible
+    const manipulated = await ImageManipulator.manipulateAsync(
+      asset.uri,
+      [],
+      { compress: 0.9, format: ImageManipulator.SaveFormat.JPEG }
+    );
+    return { uri: manipulated.uri, ext: 'jpg', contentType: 'image/jpeg' };
+  };
+
+  // ⬇️ Upload bytes réels (ArrayBuffer), fini les fichiers 0 bytes
+  const uploadToSupabase = async (
+    localUri: string,
+    ext: string,
+    contentType: string,
+    userId: string
+  ) => {
+    // Chemin: catches/{user_id}/YYYYMMDDHHmmss-{rand}.{ext}
+    const stamp = new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 14);
+    const rand = Math.random().toString(36).slice(2, 8);
+    const filePath = `catches/${userId}/${stamp}-${rand}.${ext}`;
+
+    // 1) Vérification du fichier local
+    const info = await FileSystem.getInfoAsync(localUri);
+    if (!info.exists) throw new Error('Local file not found: ' + localUri);
+
+    // 2) Lecture en base64 puis conversion en ArrayBuffer (octets)
+    const base64 = await FileSystem.readAsStringAsync(localUri, { encoding: FileSystem.EncodingType.Base64 });
+    if (!base64 || base64.length < 10) throw new Error('Empty base64 data');
+    const arrayBuffer = decode(base64);
+
+    // 3) Upload des octets à Supabase
+    const { error } = await supabase.storage
+      .from('catch-photos')
+      .upload(filePath, arrayBuffer, {
+        contentType,
+        cacheControl: '3600',
+        upsert: false,
+      });
+
+    if (error) throw error;
+    return filePath; // 👉 à stocker en BDD (colonne photo_path)
+  };
+
+  // ---- Submit ----
   const onSave = async () => {
     if (!session) {
       Alert.alert('Non connecté', 'Veuillez vous connecter.');
@@ -23,13 +116,35 @@ export default function AddCatchScreen() {
       Alert.alert('Espèce requise', "Merci d'indiquer l'espèce pêchée.");
       return;
     }
+
     setLoading(true);
+
+    let photoPath: string | undefined = undefined;
+    try {
+      if (image?.uri) {
+        const prep = await prepareImageForUpload(image);
+        photoPath = await uploadToSupabase(prep.uri, prep.ext, prep.contentType, session.user.id);
+      }
+    } catch (e: any) {
+      console.warn('Image upload failed:', e?.message ?? e);
+      const msg = `${e?.message || e}`;
+      if (/row-level security/i.test(msg)) {
+        Alert.alert(
+          'RLS Supabase',
+          "Upload bloqué par RLS. Vérifie :\n• bucket `catch-photos`\n• chemin `catches/{auth.uid()}/...`\n• policies INSERT/UPDATE/DELETE actives"
+        );
+      } else {
+        Alert.alert('Photo non importée', "Impossible d'importer la photo. La prise sera enregistrée sans image.");
+      }
+    }
+
     const payload: any = {
       user_id: session.user.id,
       species: species.trim(),
       notes: notes.trim() || null,
       caught_at: new Date().toISOString(),
     };
+    if (photoPath) payload.photo_path = photoPath; // ✅ on n’envoie la colonne que si on a une photo
     if (weight) payload.weight_kg = parseFloat(weight.replace(',', '.'));
     if (length) payload.length_cm = parseFloat(length.replace(',', '.'));
 
@@ -39,10 +154,11 @@ export default function AddCatchScreen() {
       Alert.alert('Sauvegarde impossible', error.message);
       return;
     }
-    Alert.alert('Ajouté ✅', 'La prise a été enregistrée.');
+    Alert.alert('Ajouté ✔️', 'La prise a été enregistrée.');
     router.replace('/(tabs)/history');
   };
 
+  // ---- UI ----
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
       <ScrollView contentContainerStyle={styles.container}>
@@ -52,6 +168,25 @@ export default function AddCatchScreen() {
           <TextInput placeholder="Poids (kg)" value={weight} onChangeText={setWeight} style={styles.input} keyboardType="decimal-pad" />
           <TextInput placeholder="Taille (cm)" value={length} onChangeText={setLength} style={styles.input} keyboardType="decimal-pad" />
           <TextInput placeholder="Notes (optionnel)" value={notes} onChangeText={setNotes} style={[styles.input, { height: 100 }]} multiline />
+
+          {image?.uri ? (
+            <View style={styles.previewRow}>
+              <Image source={{ uri: image.uri }} style={styles.preview} contentFit="cover" />
+              <Pressable onPress={() => setImage(null)} style={[styles.secondaryButton, { marginLeft: 12 }]}>
+                <Text style={styles.secondaryButtonText}>Retirer la photo</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <View style={{ flexDirection: 'row', gap: 12 }}>
+              <Pressable onPress={onPickImage} style={styles.secondaryButton}>
+                <Text style={styles.secondaryButtonText}>Choisir une photo</Text>
+              </Pressable>
+              <Pressable onPress={onTakePhoto} style={styles.secondaryButton}>
+                <Text style={styles.secondaryButtonText}>Prendre une photo</Text>
+              </Pressable>
+            </View>
+          )}
+
           <Pressable onPress={onSave} style={[styles.button, loading && { opacity: 0.7 }]} disabled={loading}>
             <Text style={styles.buttonText}>{loading ? 'Enregistrement…' : 'Enregistrer'}</Text>
           </Pressable>
@@ -68,5 +203,8 @@ const styles = StyleSheet.create({
   input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 12 },
   button: { backgroundColor: '#1e90ff', padding: 14, borderRadius: 8, alignItems: 'center' },
   buttonText: { color: 'white', fontWeight: '600' },
+  secondaryButton: { backgroundColor: '#f1f1f1', paddingVertical: 12, paddingHorizontal: 14, borderRadius: 8, alignItems: 'center' },
+  secondaryButtonText: { color: '#333', fontWeight: '600' },
+  previewRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  preview: { width: 120, height: 120, borderRadius: 8, backgroundColor: '#eee' },
 });
-
