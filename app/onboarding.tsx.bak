@@ -3,7 +3,6 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/providers/AuthProvider';
-import { ThemedSafeArea } from '@/components/SafeArea';
 
 export default function OnboardingScreen() {
   const router = useRouter();
@@ -15,7 +14,6 @@ export default function OnboardingScreen() {
   };
 
   return (
-    <ThemedSafeArea>
     <View style={styles.container}>
       <Text style={styles.title}>Bienvenue sur Fishco 🎣</Text>
       <Text style={styles.subtitle}>Ajoute tes prises et consulte ton historique.</Text>
@@ -23,7 +21,6 @@ export default function OnboardingScreen() {
         <Text style={styles.buttonText}>Commencer</Text>
       </Pressable>
     </View>
-    </ThemedSafeArea>
   );
 }
 
@@ -34,3 +31,5 @@ const styles = StyleSheet.create({
   button: { backgroundColor: '#1e90ff', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 8 },
   buttonText: { color: 'white', fontWeight: '600' },
 });
+
+

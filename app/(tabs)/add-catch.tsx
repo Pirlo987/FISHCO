@@ -8,6 +8,8 @@ import { Image } from 'expo-image';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as FileSystem from 'expo-file-system';
 import { decode } from 'base64-arraybuffer';
+import { ThemedSafeArea } from '@/components/SafeArea';
+import { FISH_SPECIES, normalizeName, type Species } from '@/constants/species';
 
 export default function AddCatchScreen() {
   const router = useRouter();
@@ -19,6 +21,7 @@ export default function AddCatchScreen() {
   const [notes, setNotes] = React.useState('');
   const [loading, setLoading] = React.useState(false);
   const [image, setImage] = React.useState<ImagePicker.ImagePickerAsset | null>(null);
+  const [speciesOptions, setSpeciesOptions] = React.useState<Species[]>(FISH_SPECIES);
 
   // ---- Permissions ----
   const ensureLibraryPermission = React.useCallback(async () => {
@@ -62,6 +65,40 @@ export default function AddCatchScreen() {
   }, [requestCameraPermission]);
 
   // ---- Helpers ----
+  // Liste des espèces (DB -> repli local)
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('species')
+          .select('*');
+        if (!error && data && Array.isArray(data)) {
+          const mapped: Species[] = (data as any[])
+            .map((r) => {
+              const name = r.name ?? r.nom ?? r['Nom commun'] ?? r['nom commun'] ?? r.french_name ?? r.label ?? r.title ?? '';
+              const image = r.image_url ?? r.image ?? r.photo_url ?? r.url ?? r.image_path ?? r.url_path ?? undefined;
+              return { name, image } as Species;
+            })
+            .filter((s) => s.name);
+          if (!cancelled) setSpeciesOptions(mapped);
+          return;
+        }
+      } catch {}
+      if (!cancelled) setSpeciesOptions(FISH_SPECIES);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const speciesSuggestions = React.useMemo(() => {
+    const q = normalizeName(species);
+    if (!q) return speciesOptions.slice(0, 8);
+    return speciesOptions
+      .filter((s) => normalizeName(s.name).includes(q))
+      .slice(0, 8);
+  }, [species, speciesOptions]);
   const prepareImageForUpload = async (asset: ImagePicker.ImagePickerAsset) => {
     // 🔒 Normalise TOUT en JPEG pour garantir un fichier local file:// lisible
     const manipulated = await ImageManipulator.manipulateAsync(
@@ -160,7 +197,8 @@ export default function AddCatchScreen() {
 
   // ---- UI ----
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+    <ThemedSafeArea>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
       <ScrollView contentContainerStyle={styles.container}>
         <View style={styles.form}>
           <Text style={styles.title}>Ajouter une prise</Text>
@@ -187,12 +225,22 @@ export default function AddCatchScreen() {
             </View>
           )}
 
+          {!!speciesSuggestions.length && (
+            <View style={styles.suggestions}>
+              {speciesSuggestions.map((s) => (
+                <Pressable key={s.name} onPress={() => setSpecies(s.name)} style={styles.suggestionChip}>
+                  <Text style={styles.suggestionText}>{s.name}</Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
           <Pressable onPress={onSave} style={[styles.button, loading && { opacity: 0.7 }]} disabled={loading}>
             <Text style={styles.buttonText}>{loading ? 'Enregistrement…' : 'Enregistrer'}</Text>
           </Pressable>
         </View>
       </ScrollView>
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </ThemedSafeArea>
   );
 }
 
@@ -201,6 +249,9 @@ const styles = StyleSheet.create({
   form: { width: '100%', maxWidth: 520, alignSelf: 'center', gap: 12 },
   title: { fontSize: 22, fontWeight: '600', marginVertical: 6 },
   input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 12 },
+  suggestions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 6 },
+  suggestionChip: { backgroundColor: '#f1f1f1', paddingVertical: 6, paddingHorizontal: 10, borderRadius: 999 },
+  suggestionText: { color: '#333' },
   button: { backgroundColor: '#1e90ff', padding: 14, borderRadius: 8, alignItems: 'center' },
   buttonText: { color: 'white', fontWeight: '600' },
   secondaryButton: { backgroundColor: '#f1f1f1', paddingVertical: 12, paddingHorizontal: 14, borderRadius: 8, alignItems: 'center' },
