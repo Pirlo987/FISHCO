@@ -3,6 +3,7 @@ import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, Text, View } f
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/AuthProvider';
 import { Image } from 'expo-image';
+import { ThemedSafeArea } from '@/components/SafeArea';
 
 type Catch = {
   id: string;
@@ -58,6 +59,7 @@ export default function HistoryScreen() {
   }
 
   return (
+    <ThemedSafeArea>
     <FlatList
       contentContainerStyle={data.length === 0 && styles.flexGrow}
       data={data}
@@ -87,6 +89,7 @@ export default function HistoryScreen() {
         );
       }}
     />
+    </ThemedSafeArea>
   );
 }
 

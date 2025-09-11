@@ -1,6 +1,7 @@
 import React from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useAuth } from '@/providers/AuthProvider';
+import { ThemedSafeArea } from '@/components/SafeArea';
 
 export default function ProfileScreen() {
   const { session, signOut } = useAuth();
@@ -11,6 +12,7 @@ export default function ProfileScreen() {
   };
 
   return (
+    <ThemedSafeArea>
     <View style={styles.container}>
       <Text style={styles.title}>Profil</Text>
       <Text style={styles.label}>Email</Text>
@@ -20,6 +22,7 @@ export default function ProfileScreen() {
         <Text style={styles.buttonText}>Se déconnecter</Text>
       </Pressable>
     </View>
+    </ThemedSafeArea>
   );
 }
 
@@ -31,4 +34,3 @@ const styles = StyleSheet.create({
   button: { marginTop: 16, backgroundColor: '#ef4444', padding: 12, borderRadius: 8, alignItems: 'center' },
   buttonText: { color: 'white', fontWeight: '600' },
 });
-

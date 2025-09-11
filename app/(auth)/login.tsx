@@ -2,6 +2,7 @@ import React from 'react';
 import { Alert, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Link, useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
+import { ThemedSafeArea } from '@/components/SafeArea';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -25,6 +26,7 @@ export default function LoginScreen() {
   };
 
   return (
+    <ThemedSafeArea>
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.container}>
       <View style={styles.card}>
         <Text style={styles.title}>Bienvenue 👋</Text>
@@ -51,6 +53,7 @@ export default function LoginScreen() {
         </Text>
       </View>
     </KeyboardAvoidingView>
+    </ThemedSafeArea>
   );
 }
 
@@ -63,4 +66,3 @@ const styles = StyleSheet.create({
   buttonText: { color: 'white', fontWeight: '600' },
   bottomText: { textAlign: 'center', marginTop: 8 },
 });
-

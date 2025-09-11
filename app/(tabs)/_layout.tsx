@@ -34,6 +34,13 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="explore"
+        options={{
+          title: 'Explorer',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="chevron.right" color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="add-catch"
         options={{
           title: 'Ajouter',
@@ -45,6 +52,13 @@ export default function TabLayout() {
         options={{
           title: 'Historique',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="clock.fill" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="debug-image"
+        options={{
+          title: 'Debug Img',
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="photo" color={color} />,
         }}
       />
       <Tabs.Screen
