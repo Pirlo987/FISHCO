@@ -55,13 +55,6 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="debug-image"
-        options={{
-          title: 'Debug Img',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="photo" color={color} />,
-        }}
-      />
-      <Tabs.Screen
         name="profile"
         options={{
           title: 'Profil',

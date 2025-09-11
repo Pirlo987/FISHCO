@@ -1,7 +1,9 @@
 import React from 'react';
 import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
+import { events } from '@/lib/events';
 import { useAuth } from '@/providers/AuthProvider';
 import * as ImagePicker from 'expo-image-picker';
 import { Image } from 'expo-image';
@@ -14,6 +16,7 @@ import { FISH_SPECIES, normalizeName, type Species } from '@/constants/species';
 export default function AddCatchScreen() {
   const router = useRouter();
   const { session } = useAuth();
+  const insets = useSafeAreaInsets();
 
   const [species, setSpecies] = React.useState('');
   const [weight, setWeight] = React.useState('');
@@ -81,7 +84,13 @@ export default function AddCatchScreen() {
               return { name, image } as Species;
             })
             .filter((s) => s.name);
-          if (!cancelled) setSpeciesOptions(mapped);
+          // Deduplicate by normalized name to avoid duplicate keys in lists
+          const byKey = new Map<string, Species>();
+          for (const s of mapped) {
+            const key = normalizeName(s.name);
+            if (!byKey.has(key)) byKey.set(key, s);
+          }
+          if (!cancelled) setSpeciesOptions(Array.from(byKey.values()));
           return;
         }
       } catch {}
@@ -192,15 +201,24 @@ export default function AddCatchScreen() {
       return;
     }
     Alert.alert('Ajouté ✔️', 'La prise a été enregistrée.');
+    // Notifier les autres écrans (Explorer) qu'une prise vient d'être ajoutée
+    try {
+      events.emit('catch:added', { species: species.trim(), photoPath });
+    } catch {}
     router.replace('/(tabs)/history');
   };
 
   // ---- UI ----
   return (
-    <ThemedSafeArea>
+    <ThemedSafeArea edges={['bottom']}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
-      <ScrollView contentContainerStyle={styles.container}>
+      <ScrollView contentContainerStyle={[styles.container, { paddingTop: 16 + insets.top }] }>
         <View style={styles.form}>
+          {image?.uri ? (
+            <View style={[styles.hero, { marginTop: -insets.top, marginHorizontal: -16 }] }>
+              <Image source={{ uri: image.uri }} style={styles.heroImage} contentFit="cover" />
+            </View>
+          ) : null}
           <Text style={styles.title}>Ajouter une prise</Text>
           <TextInput placeholder="Espèce (obligatoire)" value={species} onChangeText={setSpecies} style={styles.input} />
           <TextInput placeholder="Poids (kg)" value={weight} onChangeText={setWeight} style={styles.input} keyboardType="decimal-pad" />
@@ -208,12 +226,9 @@ export default function AddCatchScreen() {
           <TextInput placeholder="Notes (optionnel)" value={notes} onChangeText={setNotes} style={[styles.input, { height: 100 }]} multiline />
 
           {image?.uri ? (
-            <View style={styles.previewRow}>
-              <Image source={{ uri: image.uri }} style={styles.preview} contentFit="cover" />
-              <Pressable onPress={() => setImage(null)} style={[styles.secondaryButton, { marginLeft: 12 }]}>
-                <Text style={styles.secondaryButtonText}>Retirer la photo</Text>
-              </Pressable>
-            </View>
+            <Pressable onPress={() => setImage(null)} style={[styles.secondaryButton]}>
+              <Text style={styles.secondaryButtonText}>Retirer la photo</Text>
+            </Pressable>
           ) : (
             <View style={{ flexDirection: 'row', gap: 12 }}>
               <Pressable onPress={onPickImage} style={styles.secondaryButton}>
@@ -227,8 +242,8 @@ export default function AddCatchScreen() {
 
           {!!speciesSuggestions.length && (
             <View style={styles.suggestions}>
-              {speciesSuggestions.map((s) => (
-                <Pressable key={s.name} onPress={() => setSpecies(s.name)} style={styles.suggestionChip}>
+              {speciesSuggestions.map((s, i) => (
+                <Pressable key={`${normalizeName(s.name)}-${i}`} onPress={() => setSpecies(s.name)} style={styles.suggestionChip}>
                   <Text style={styles.suggestionText}>{s.name}</Text>
                 </Pressable>
               ))}
@@ -247,6 +262,8 @@ export default function AddCatchScreen() {
 const styles = StyleSheet.create({
   container: { flexGrow: 1, padding: 16 },
   form: { width: '100%', maxWidth: 520, alignSelf: 'center', gap: 12 },
+  hero: { height: 220, borderRadius: 12, overflow: 'hidden', backgroundColor: '#eee', marginBottom: 8 },
+  heroImage: { width: '100%', height: '100%' },
   title: { fontSize: 22, fontWeight: '600', marginVertical: 6 },
   input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 12 },
   suggestions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 6 },
