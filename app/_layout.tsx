@@ -79,7 +79,7 @@ export default function RootLayout() {
             <Stack.Screen name="+not-found" />
           </Stack>
         </AuthGate>
-        <StatusBar style="auto" />
+        <StatusBar style="dark" />
       </ThemeProvider>
     </AuthProvider>
   );

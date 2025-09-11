@@ -1,7 +1,8 @@
 import React from 'react';
-import { ActivityIndicator, FlatList, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { Image } from 'expo-image';
-import { useFocusEffect } from '@react-navigation/native';
+import { useRouter } from 'expo-router';
+import { events } from '@/lib/events';
 
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/AuthProvider';
@@ -13,11 +14,15 @@ import { ThemedText } from '@/components/ThemedText';
 type CatchRow = { species: string | null; photo_path: string | null };
 
 export default function ExploreScreen() {
+  const router = useRouter();
   const { session } = useAuth();
   const [search, setSearch] = React.useState('');
   const [loading, setLoading] = React.useState(true);
   const [discovered, setDiscovered] = React.useState<Set<string>>(new Set());
   const [photoBySpecies, setPhotoBySpecies] = React.useState<Record<string, string | null>>({});
+  const [discoveredFilter, setDiscoveredFilter] = React.useState<'all' | 'discovered' | 'undiscovered'>('all');
+  const [onlyDbImage, setOnlyDbImage] = React.useState(false);
+  const [onlyUserPhoto, setOnlyUserPhoto] = React.useState(false);
 
   const { width } = useWindowDimensions();
   const padding = 16;
@@ -112,13 +117,13 @@ export default function ExploreScreen() {
     fetchDiscovered();
   }, [fetchDiscovered]);
 
-  // Raffraîchir à chaque focus de l'onglet Explorer
-  useFocusEffect(
-    React.useCallback(() => {
+  // Ne plus rafraîchir sur focus; on écoute seulement les ajouts de prises
+  React.useEffect(() => {
+    const off = events.on('catch:added', () => {
       fetchDiscovered();
-      return () => {};
-    }, [fetchDiscovered])
-  );
+    });
+    return off;
+  }, [fetchDiscovered]);
 
   const [speciesList, setSpeciesList] = React.useState<Species[]>([]);
   // Variables conservées pour compat avec onEndReached (désactivé logiquement)
@@ -148,7 +153,13 @@ export default function ExploreScreen() {
               return { name, image } as Species;
             })
             .filter((s) => s.name);
-          if (!cancelled) setSpeciesList(mapped);
+          // Deduplicate by normalized name to avoid duplicate keys
+          const byKey = new Map<string, Species>();
+          for (const s of mapped) {
+            const key = normalizeName(s.name);
+            if (!byKey.has(key)) byKey.set(key, s);
+          }
+          if (!cancelled) setSpeciesList(Array.from(byKey.values()));
           if (!cancelled) setLoading(false);
           return;
         }
@@ -178,9 +189,17 @@ export default function ExploreScreen() {
 
   const filtered = React.useMemo(() => {
     const q = normalizeName(search);
-    if (!q) return speciesList;
-    return speciesList.filter((s) => normalizeName(s.name).includes(q));
-  }, [search, speciesList]);
+    const base = q ? speciesList.filter((s) => normalizeName(s.name).includes(q)) : speciesList;
+    return base.filter((s) => {
+      const key = normalizeName(s.name);
+      const isDiscovered = discovered.has(key);
+      if (discoveredFilter === 'discovered' && !isDiscovered) return false;
+      if (discoveredFilter === 'undiscovered' && isDiscovered) return false;
+      if (onlyDbImage && !s.image) return false;
+      if (onlyUserPhoto && !photoBySpecies[key]) return false;
+      return true;
+    });
+  }, [search, speciesList, discovered, discoveredFilter, onlyDbImage, onlyUserPhoto, photoBySpecies]);
 
   return (
     <ThemedSafeArea>
@@ -194,6 +213,28 @@ export default function ExploreScreen() {
           style={styles.search}
           placeholderTextColor="#888"
         />
+        <View style={styles.filtersRowWrapper}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filtersRow}>
+            <Pressable
+              onPress={() => setDiscoveredFilter((v) => (v === 'discovered' ? 'all' : 'discovered'))}
+              style={[styles.chip, discoveredFilter === 'discovered' && styles.chipActive]}
+            >
+              <Text style={[styles.chipText, discoveredFilter === 'discovered' && styles.chipTextActive]}>Découverts</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => setDiscoveredFilter((v) => (v === 'undiscovered' ? 'all' : 'undiscovered'))}
+              style={[styles.chip, discoveredFilter === 'undiscovered' && styles.chipActive]}
+            >
+              <Text style={[styles.chipText, discoveredFilter === 'undiscovered' && styles.chipTextActive]}>À découvrir</Text>
+            </Pressable>
+            <Pressable onPress={() => setOnlyDbImage((v) => !v)} style={[styles.chip, onlyDbImage && styles.chipActive]}>
+              <Text style={[styles.chipText, onlyDbImage && styles.chipTextActive]}>Avec image</Text>
+            </Pressable>
+            <Pressable onPress={() => setOnlyUserPhoto((v) => !v)} style={[styles.chip, onlyUserPhoto && styles.chipActive]}>
+              <Text style={[styles.chipText, onlyUserPhoto && styles.chipTextActive]}>Avec photo</Text>
+            </Pressable>
+          </ScrollView>
+        </View>
       </View>
 
       {loading ? (
@@ -217,7 +258,10 @@ export default function ExploreScreen() {
             const userPhoto = photoBySpecies[key] ?? null;
             const uri = item.image ?? (isDiscovered ? userPhoto ?? null : null);
             return (
-              <View style={{ width: tileW, marginBottom: 12 }}>
+              <Pressable
+                onPress={() => router.push({ pathname: '/species/[slug]', params: { slug: key, name: item.name } })}
+                style={{ width: tileW, marginBottom: 12 }}
+              >
                 <View style={[styles.tile, !isDiscovered && styles.tileUndiscovered, { height: tileW }]}>
                   {uri ? (
                     <Image source={{ uri }} style={styles.tileImage} contentFit="cover" />
@@ -230,7 +274,7 @@ export default function ExploreScreen() {
                 <Text style={[styles.tileLabel, !isDiscovered && styles.tileLabelDim]} numberOfLines={1}>
                   {isDiscovered ? item.name : '???'}
                 </Text>
-              </View>
+              </Pressable>
             );
           }}
           ListEmptyComponent={() => (
@@ -255,6 +299,20 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     backgroundColor: '#fff',
   },
+  filtersRowWrapper: { marginTop: 2 },
+  filtersRow: { paddingVertical: 4, gap: 8, paddingRight: 8 },
+  chip: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    backgroundColor: '#f1f1f1',
+    marginRight: 8,
+  },
+  chipActive: {
+    backgroundColor: '#1e90ff',
+  },
+  chipText: { color: '#333', fontWeight: '600' },
+  chipTextActive: { color: '#fff' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   tile: {
     borderRadius: 10,
