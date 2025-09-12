@@ -1,5 +1,5 @@
-import React from 'react';
-import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+﻿import React from 'react';
+import { Alert, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
@@ -25,6 +25,8 @@ export default function AddCatchScreen() {
   const [loading, setLoading] = React.useState(false);
   const [image, setImage] = React.useState<ImagePicker.ImagePickerAsset | null>(null);
   const [speciesOptions, setSpeciesOptions] = React.useState<Species[]>(FISH_SPECIES);
+  const [errors, setErrors] = React.useState<{ species?: string; weight?: string; length?: string; image?: string }>({});
+  const [speciesFocused, setSpeciesFocused] = React.useState(false);
 
   // ---- Permissions ----
   const ensureLibraryPermission = React.useCallback(async () => {
@@ -32,20 +34,20 @@ export default function AddCatchScreen() {
     if (current.granted || (Platform.OS === 'ios' && (current as any).accessPrivileges === 'limited')) return true;
     const req = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (req.granted || (Platform.OS === 'ios' && (req as any).accessPrivileges === 'limited')) return true;
-    Alert.alert('Permission requise', "Autorise l'accès à la photothèque pour sélectionner une image.");
+    Alert.alert('Permission requise', "Autorise l'accÃ¨s Ã  la photothÃ¨que pour sÃ©lectionner une image.");
     return false;
   }, []);
 
   const requestCameraPermission = React.useCallback(async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permission requise', "Autorise l'accès à la caméra pour prendre une photo.");
+      Alert.alert('Permission requise', "Autorise l'accÃ¨s Ã  la camÃ©ra pour prendre une photo.");
       return false;
     }
     return true;
   }, []);
 
-  // ---- Sélection / Prise de photo ----
+  // ---- SÃ©lection / Prise de photo ----
   const onPickImage = React.useCallback(async () => {
     const ok = await ensureLibraryPermission();
     if (!ok) return;
@@ -68,7 +70,7 @@ export default function AddCatchScreen() {
   }, [requestCameraPermission]);
 
   // ---- Helpers ----
-  // Liste des espèces (DB -> repli local)
+  // Liste des espÃ¨ces (DB -> repli local)
   React.useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -108,8 +110,28 @@ export default function AddCatchScreen() {
       .filter((s) => normalizeName(s.name).includes(q))
       .slice(0, 8);
   }, [species, speciesOptions]);
+  React.useEffect(() => {
+    if (errors.species && species.trim()) setErrors((e) => ({ ...e, species: undefined }));
+  }, [species]);
+  React.useEffect(() => {
+    if (errors.image && image?.uri) setErrors((e) => ({ ...e, image: undefined }));
+  }, [image]);
+  const isPositiveNumber = (v: string) => {
+    if (!v || !v.trim()) return false;
+    const n = parseFloat(v.replace(',', '.'));
+    return Number.isFinite(n) && n > 0;
+  };
+  const validate = () => {
+    const next: { species?: string; weight?: string; length?: string; image?: string } = {};
+    if (!species.trim()) next.species = "EspÃ¨ce requise";
+    if (!isPositiveNumber(weight)) next.weight = 'Poids requis (> 0)';
+    if (!isPositiveNumber(length)) next.length = 'Taille requise (> 0)';
+    if (!image?.uri) next.image = 'Photo requise';
+    setErrors(next);
+    return Object.keys(next).length === 0;
+  };
   const prepareImageForUpload = async (asset: ImagePicker.ImagePickerAsset) => {
-    // 🔒 Normalise TOUT en JPEG pour garantir un fichier local file:// lisible
+    // ðŸ”’ Normalise TOUT en JPEG pour garantir un fichier local file:// lisible
     const manipulated = await ImageManipulator.manipulateAsync(
       asset.uri,
       [],
@@ -118,7 +140,7 @@ export default function AddCatchScreen() {
     return { uri: manipulated.uri, ext: 'jpg', contentType: 'image/jpeg' };
   };
 
-  // ⬇️ Upload bytes réels (ArrayBuffer), fini les fichiers 0 bytes
+  // â¬‡ï¸ Upload bytes rÃ©els (ArrayBuffer), fini les fichiers 0 bytes
   const uploadToSupabase = async (
     localUri: string,
     ext: string,
@@ -130,7 +152,7 @@ export default function AddCatchScreen() {
     const rand = Math.random().toString(36).slice(2, 8);
     const filePath = `catches/${userId}/${stamp}-${rand}.${ext}`;
 
-    // 1) Vérification du fichier local
+    // 1) VÃ©rification du fichier local
     const info = await FileSystem.getInfoAsync(localUri);
     if (!info.exists) throw new Error('Local file not found: ' + localUri);
 
@@ -139,7 +161,7 @@ export default function AddCatchScreen() {
     if (!base64 || base64.length < 10) throw new Error('Empty base64 data');
     const arrayBuffer = decode(base64);
 
-    // 3) Upload des octets à Supabase
+    // 3) Upload des octets Ã  Supabase
     const { error } = await supabase.storage
       .from('catch-photos')
       .upload(filePath, arrayBuffer, {
@@ -149,23 +171,30 @@ export default function AddCatchScreen() {
       });
 
     if (error) throw error;
-    return filePath; // 👉 à stocker en BDD (colonne photo_path)
+    return filePath; // ðŸ‘‰ Ã  stocker en BDD (colonne photo_path)
   };
 
   // ---- Submit ----
   const onSave = async () => {
     if (!session) {
-      Alert.alert('Non connecté', 'Veuillez vous connecter.');
+      Alert.alert('Non connectÃ©', 'Veuillez vous connecter.');
       return;
     }
+    if (!validate()) { Alert.alert('Champs requis', 'ComplÃ¨te les champs obligatoires.'); return; }
     if (!species.trim()) {
-      Alert.alert('Espèce requise', "Merci d'indiquer l'espèce pêchée.");
+      Alert.alert('EspÃ¨ce requise', "Merci d'indiquer l'espÃ¨ce pÃªchÃ©e.");
       return;
     }
 
     setLoading(true);
 
     let photoPath: string | undefined = undefined;
+    if (!image?.uri) {
+      setLoading(false);
+      setErrors((e) => ({ ...e, image: 'Photo requise' }));
+      Alert.alert('Photo requise', "Ajoute une photo pour enregistrer la prise.");
+      return;
+    }
     try {
       if (image?.uri) {
         const prep = await prepareImageForUpload(image);
@@ -177,10 +206,10 @@ export default function AddCatchScreen() {
       if (/row-level security/i.test(msg)) {
         Alert.alert(
           'RLS Supabase',
-          "Upload bloqué par RLS. Vérifie :\n• bucket `catch-photos`\n• chemin `catches/{auth.uid()}/...`\n• policies INSERT/UPDATE/DELETE actives"
+          "Upload bloquÃ© par RLS. VÃ©rifie :\nâ€¢ bucket `catch-photos`\nâ€¢ chemin `catches/{auth.uid()}/...`\nâ€¢ policies INSERT/UPDATE/DELETE actives"
         );
       } else {
-        Alert.alert('Photo non importée', "Impossible d'importer la photo. La prise sera enregistrée sans image.");
+        Alert.alert('Photo non importÃ©e', "Impossible d'importer la photo. La prise sera enregistrÃ©e sans image.");
       }
     }
 
@@ -190,7 +219,7 @@ export default function AddCatchScreen() {
       notes: notes.trim() || null,
       caught_at: new Date().toISOString(),
     };
-    if (photoPath) payload.photo_path = photoPath; // ✅ on n’envoie la colonne que si on a une photo
+    if (photoPath) payload.photo_path = photoPath; // âœ… on nâ€™envoie la colonne que si on a une photo
     if (weight) payload.weight_kg = parseFloat(weight.replace(',', '.'));
     if (length) payload.length_cm = parseFloat(length.replace(',', '.'));
 
@@ -200,8 +229,8 @@ export default function AddCatchScreen() {
       Alert.alert('Sauvegarde impossible', error.message);
       return;
     }
-    Alert.alert('Ajouté ✔️', 'La prise a été enregistrée.');
-    // Notifier les autres écrans (Explorer) qu'une prise vient d'être ajoutée
+    Alert.alert('AjoutÃ© âœ”ï¸', 'La prise a Ã©tÃ© enregistrÃ©e.');
+    // Notifier les autres Ã©crans (Explorer) qu'une prise vient d'Ãªtre ajoutÃ©e
     try {
       events.emit('catch:added', { species: species.trim(), photoPath });
     } catch {}
@@ -220,9 +249,21 @@ export default function AddCatchScreen() {
             </View>
           ) : null}
           <Text style={styles.title}>Ajouter une prise</Text>
-          <TextInput placeholder="Espèce (obligatoire)" value={species} onChangeText={setSpecies} style={styles.input} />
-          <TextInput placeholder="Poids (kg)" value={weight} onChangeText={setWeight} style={styles.input} keyboardType="decimal-pad" />
-          <TextInput placeholder="Taille (cm)" value={length} onChangeText={setLength} style={styles.input} keyboardType="decimal-pad" />
+          {!!errors.species && <Text style={styles.errorText}>{errors.species}</Text>}
+          <TextInput placeholder="Esp��ce (obligatoire)" value={species} onChangeText={(t) => { setSpecies(t); if (errors.species) setErrors((e) => ({ ...e, species: undefined })); }} onFocus={() => setSpeciesFocused(true)} onBlur={() => setTimeout(() => setSpeciesFocused(false), 120)} style={[styles.input, errors.species && styles.inputError]} autoCapitalize="words" autoCorrect={false} />
+          {speciesFocused && !!species.trim() && !!speciesSuggestions.length && (
+            <View style={styles.suggestions}>
+              {speciesSuggestions.map((s, i) => (
+                <Pressable key={`${normalizeName(s.name)}-${i}`} onPress={() => { setSpecies(s.name); if (errors.species) setErrors((e) => ({ ...e, species: undefined })); setSpeciesFocused(false); try { Keyboard.dismiss(); } catch {} }} style={styles.suggestionChip}>
+                  <Text style={styles.suggestionText}>{s.name}</Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
+          <TextInput placeholder="Poids (kg)*" value={weight} onChangeText={(t) => { setWeight(t); if (errors.weight) setErrors((e) => ({ ...e, weight: undefined })); }} style={[styles.input, errors.weight && styles.inputError]} keyboardType="decimal-pad" />
+          {!!errors.weight && <Text style={styles.errorText}>{errors.weight}</Text>}
+          <TextInput placeholder="Taille (cm)*" value={length} onChangeText={(t) => { setLength(t); if (errors.length) setErrors((e) => ({ ...e, length: undefined })); }} style={[styles.input, errors.length && styles.inputError]} keyboardType="decimal-pad" />
+          {!!errors.length && <Text style={styles.errorText}>{errors.length}</Text>}
           <TextInput placeholder="Notes (optionnel)" value={notes} onChangeText={setNotes} style={[styles.input, { height: 100 }]} multiline />
 
           {image?.uri ? (
@@ -239,18 +280,9 @@ export default function AddCatchScreen() {
               </Pressable>
             </View>
           )}
-
-          {!!speciesSuggestions.length && (
-            <View style={styles.suggestions}>
-              {speciesSuggestions.map((s, i) => (
-                <Pressable key={`${normalizeName(s.name)}-${i}`} onPress={() => setSpecies(s.name)} style={styles.suggestionChip}>
-                  <Text style={styles.suggestionText}>{s.name}</Text>
-                </Pressable>
-              ))}
-            </View>
-          )}
+          {!!errors.image && <Text style={styles.errorText}>{errors.image}</Text>}
           <Pressable onPress={onSave} style={[styles.button, loading && { opacity: 0.7 }]} disabled={loading}>
-            <Text style={styles.buttonText}>{loading ? 'Enregistrement…' : 'Enregistrer'}</Text>
+            <Text style={styles.buttonText}>{loading ? 'Enregistrementâ€¦' : 'Enregistrer'}</Text>
           </Pressable>
         </View>
       </ScrollView>
@@ -266,9 +298,22 @@ const styles = StyleSheet.create({
   heroImage: { width: '100%', height: '100%' },
   title: { fontSize: 22, fontWeight: '600', marginVertical: 6 },
   input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 12 },
-  suggestions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 6 },
-  suggestionChip: { backgroundColor: '#f1f1f1', paddingVertical: 6, paddingHorizontal: 10, borderRadius: 999 },
-  suggestionText: { color: '#333' },
+  inputError: { borderColor: '#e11d48' },
+  errorText: { color: '#e11d48', marginTop: -6, marginBottom: 6 },
+  suggestions: {
+    marginTop: 6,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#e5e7eb',
+    backgroundColor: 'white',
+    borderRadius: 10,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  suggestionChip: { paddingVertical: 10, paddingHorizontal: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: '#eee' },
+  suggestionText: { color: '#111' },
   button: { backgroundColor: '#1e90ff', padding: 14, borderRadius: 8, alignItems: 'center' },
   buttonText: { color: 'white', fontWeight: '600' },
   secondaryButton: { backgroundColor: '#f1f1f1', paddingVertical: 12, paddingHorizontal: 14, borderRadius: 8, alignItems: 'center' },
@@ -276,3 +321,7 @@ const styles = StyleSheet.create({
   previewRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   preview: { width: 120, height: 120, borderRadius: 8, backgroundColor: '#eee' },
 });
+
+
+
+
