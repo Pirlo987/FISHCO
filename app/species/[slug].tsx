@@ -11,6 +11,8 @@ import { supabase } from '@/lib/supabase';
 import { normalizeName } from '@/constants/species';
 import ParallaxScrollView from '@/components/ParallaxScrollView';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { events } from '@/lib/events';
+import { useAuth } from '@/providers/AuthProvider';
 
 type SpeciesRecord = Record<string, any> & {
   // Names
@@ -78,11 +80,31 @@ export default function SpeciesDetailScreen() {
   const initialName = (params.name && String(params.name)) || undefined;
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { session } = useAuth();
 
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [record, setRecord] = React.useState<SpeciesRecord | null>(null);
   const [imageUrl, setImageUrl] = React.useState<string | undefined>(undefined);
+  const [activeTab, setActiveTab] = React.useState<'infos' | 'catches'>('infos');
+  const [myCatches, setMyCatches] = React.useState<Array<{
+    id: string;
+    species: string;
+    weight_kg: number | null;
+    length_cm: number | null;
+    notes: string | null;
+    caught_at: string;
+    photo_path: string | null;
+  }>>([]);
+  const [loadingCatches, setLoadingCatches] = React.useState(false);
+  const stats = React.useMemo(() => {
+    const total = myCatches.length;
+    const weights = myCatches.map((c) => (typeof c.weight_kg === 'number' ? c.weight_kg : 0)).filter((v) => v > 0);
+    const lengths = myCatches.map((c) => (typeof c.length_cm === 'number' ? c.length_cm : 0)).filter((v) => v > 0);
+    const maxWeight = weights.length ? Math.max(...weights) : null;
+    const maxLength = lengths.length ? Math.max(...lengths) : null;
+    return { total, maxWeight, maxLength };
+  }, [myCatches]);
 
   React.useEffect(() => {
     let mounted = true;
@@ -139,6 +161,64 @@ export default function SpeciesDetailScreen() {
       mounted = false;
     };
   }, [slug, initialName]);
+
+  // URL signée (ou publique) pour photos utilisateur
+  const urlFromPhotoPath = React.useCallback(async (path?: string | null) => {
+    if (!path) return null;
+    try {
+      const { data, error } = await supabase.storage
+        .from('catch-photos')
+        .createSignedUrl(path, 60 * 60 * 24);
+      if (!error && data?.signedUrl) return data.signedUrl;
+    } catch {}
+    const { data } = supabase.storage.from('catch-photos').getPublicUrl(path);
+    return data.publicUrl ?? null;
+  }, []);
+
+  const refreshCatches = React.useCallback(async () => {
+    if (!session) {
+      setMyCatches([]);
+      return;
+    }
+    setLoadingCatches(true);
+    try {
+      const { data, error } = await supabase
+        .from('catches')
+        .select('*')
+        .eq('user_id', session.user.id)
+        .order('caught_at', { ascending: false })
+        .limit(500);
+      if (error) throw error;
+      const want = normalizeName(initialName || slug);
+      const rows = Array.isArray(data) ? (data as any[]) : [];
+      const filtered = rows.filter((r) => r?.species && normalizeName(String(r.species)) === want);
+      setMyCatches(filtered);
+    } catch (e) {
+      setMyCatches([]);
+    } finally {
+      setLoadingCatches(false);
+    }
+  }, [session, slug, initialName]);
+
+  // Charger à l'affichage
+  React.useEffect(() => {
+    let mounted = true;
+    (async () => {
+      if (!mounted) return;
+      await refreshCatches();
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [refreshCatches]);
+
+  // Rafraîchir après ajout de prise
+  React.useEffect(() => {
+    const off = events.on('catch:added', () => {
+      refreshCatches();
+    });
+    return off;
+  }, [refreshCatches]);
 
   // Flexible key access: handle accents/case/extra spaces in column names
   function normKey(k: string) {
@@ -208,28 +288,83 @@ export default function SpeciesDetailScreen() {
               </Pressable>
             </View>
           }>
-          <ThemedText type="title">{displayName}</ThemedText>
-          {!!sciName && (
-            <ThemedText style={{ marginTop: 4, color: '#444' }}>Nom scientifique: {String(sciName)}</ThemedText>
-          )}
-
-          <View style={styles.section}>
-            {!!enName && (
-              <Text style={styles.row}><Text style={styles.label}>Nom anglais: </Text>{String(enName)}</Text>
-            )}
-            {!!region && (
-              <Text style={styles.row}><Text style={styles.label}>Région / Stock: </Text>{String(region)}</Text>
-            )}
-            {!!season && (
-              <Text style={styles.row}><Text style={styles.label}>Saison optimale: </Text>{String(season)}</Text>
-            )}
-            {!!methods && (
-              <Text style={styles.row}><Text style={styles.label}>Méthodes de pêche: </Text>{String(methods)}</Text>
-            )}
-            {!!baits && (
-              <Text style={styles.row}><Text style={styles.label}>Appâts: </Text>{String(baits)}</Text>
-            )}
+          <View style={styles.titleRow}>
+            <ThemedText type="title" style={styles.titleText}>{displayName}</ThemedText>
+            {!!sciName && <Text style={styles.latinName}>{String(sciName)}</Text>}
           </View>
+
+          {/* Stats card under the title, above tabs */}
+          <View style={styles.statsCard}>
+            <View style={styles.statItem}>
+              <Text style={styles.statLabel}>Plus gros</Text>
+              <Text style={styles.statValue}>
+                {stats.maxWeight !== null ? `${Number(stats.maxWeight.toFixed(2))} kg` : '—'}
+              </Text>
+            </View>
+            <View style={styles.statItem}>
+              <Text style={styles.statLabel}>Total prises</Text>
+              <Text style={styles.statValue}>{stats.total}</Text>
+            </View>
+            <View style={styles.statItem}>
+              <Text style={styles.statLabel}>Plus long</Text>
+              <Text style={styles.statValue}>
+                {stats.maxLength !== null ? `${Math.round(stats.maxLength)} cm` : '—'}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.tabs}>
+            <Pressable
+              onPress={() => setActiveTab('infos')}
+              style={[styles.tabBtn, activeTab === 'infos' && styles.tabBtnActive]}
+            >
+              <Text style={[styles.tabText, activeTab === 'infos' && styles.tabTextActive]}>Infos</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => setActiveTab('catches')}
+              style={[styles.tabBtn, activeTab === 'catches' && styles.tabBtnActive]}
+            >
+              <Text style={[styles.tabText, activeTab === 'catches' && styles.tabTextActive]}>Mes prises</Text>
+            </Pressable>
+          </View>
+
+          {activeTab === 'infos' ? (
+            <View style={styles.section}>
+              {!!enName && (
+                <Text style={styles.row}><Text style={styles.label}>Nom anglais: </Text>{String(enName)}</Text>
+              )}
+              {!!region && (
+                <Text style={styles.row}><Text style={styles.label}>Région / Stock: </Text>{String(region)}</Text>
+              )}
+              {!!season && (
+                <Text style={styles.row}><Text style={styles.label}>Saison optimale: </Text>{String(season)}</Text>
+              )}
+              {!!methods && (
+                <Text style={styles.row}><Text style={styles.label}>Méthodes de pêche: </Text>{String(methods)}</Text>
+              )}
+              {!!baits && (
+                <Text style={styles.row}><Text style={styles.label}>Appâts: </Text>{String(baits)}</Text>
+              )}
+            </View>
+          ) : (
+            <View style={[styles.section, { marginTop: 8 }]}> 
+              {!session ? (
+                <Text style={{ color: '#666', marginTop: 6 }}>Connecte-toi pour voir tes prises de cette espèce.</Text>
+              ) : loadingCatches ? (
+                <View style={[styles.center, { paddingVertical: 16 }]}>
+                  <ActivityIndicator />
+                </View>
+              ) : myCatches.length === 0 ? (
+                <Text style={{ color: '#666', marginTop: 6 }}>Aucune prise enregistrée pour cette espèce.</Text>
+              ) : (
+                <View style={{ marginTop: 4 }}>
+                  {myCatches.map((c) => (
+                    <CatchRow key={c.id} item={c} urlFromPhotoPath={urlFromPhotoPath} />
+                  ))}
+                </View>
+              )}
+            </View>
+          )}
         </ParallaxScrollView>
       )}
     </>
@@ -247,6 +382,29 @@ const styles = StyleSheet.create({
   section: { marginTop: 16, gap: 8 },
   row: { fontSize: 16, color: '#222' },
   label: { fontWeight: '600' },
+  titleRow: { flexDirection: 'row', alignItems: 'baseline', flexWrap: 'wrap', gap: 10, marginBottom: 8 },
+  titleText: { marginRight: 6 },
+  latinName: { fontSize: 16, color: '#666' },
+  tabs: { flexDirection: 'row', gap: 8, marginTop: 8 },
+  tabBtn: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 999, backgroundColor: '#f1f1f1' },
+  tabBtnActive: { backgroundColor: '#1e90ff' },
+  tabText: { fontWeight: '600', color: '#333' },
+  tabTextActive: { color: 'white' },
+  statsCard: {
+    marginTop: 8,
+    marginBottom: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: '#f7f9fb',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#dfe7ef',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  statItem: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  statLabel: { fontSize: 12, color: '#6b7280' },
+  statValue: { fontSize: 18, fontWeight: '700', marginTop: 2 },
   backBtn: {
     position: 'absolute',
     top: 12,
@@ -259,3 +417,41 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 });
+
+type CatchItem = {
+  id: string;
+  species: string;
+  weight_kg: number | null;
+  length_cm: number | null;
+  notes: string | null;
+  caught_at: string;
+  photo_path: string | null;
+};
+
+function CatchRow({ item, urlFromPhotoPath }: { item: CatchItem; urlFromPhotoPath: (p?: string | null) => Promise<string | null> }) {
+  const [url, setUrl] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    let mounted = true;
+    (async () => {
+      const u = await urlFromPhotoPath(item.photo_path);
+      if (mounted) setUrl(u);
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [item.photo_path, urlFromPhotoPath]);
+  return (
+    <View style={{ paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: '#ddd', gap: 10, flexDirection: 'row' }}>
+      {url ? <Image source={{ uri: url }} style={{ width: 56, height: 56, borderRadius: 8, backgroundColor: '#eee' }} contentFit="cover" /> : null}
+      <View style={{ flex: 1 }}>
+        <Text style={{ fontWeight: '600' }}>{item.species}</Text>
+        <Text style={{ color: '#666', marginTop: 2 }}>
+          {new Date(item.caught_at).toLocaleString()}
+          {item.weight_kg ? ` · ${item.weight_kg} kg` : ''}
+          {item.length_cm ? ` · ${item.length_cm} cm` : ''}
+        </Text>
+        {item.notes ? <Text numberOfLines={2} style={{ marginTop: 4 }}>{item.notes}</Text> : null}
+      </View>
+    </View>
+  );
+}
