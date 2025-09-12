@@ -8,7 +8,8 @@ import { useAuth } from '@/providers/AuthProvider';
 import * as ImagePicker from 'expo-image-picker';
 import { Image } from 'expo-image';
 import * as ImageManipulator from 'expo-image-manipulator';
-import * as FileSystem from 'expo-file-system';
+// Use legacy API to avoid SDK 54 deprecation warnings
+import * as FileSystem from 'expo-file-system/legacy';
 import { decode } from 'base64-arraybuffer';
 import { ThemedSafeArea } from '@/components/SafeArea';
 import { FISH_SPECIES, normalizeName, type Species } from '@/constants/species';
@@ -241,7 +242,7 @@ export default function AddCatchScreen() {
   return (
     <ThemedSafeArea edges={['bottom']}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
-      <ScrollView contentContainerStyle={[styles.container, { paddingTop: 16 + insets.top }] }>
+      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.container, { paddingTop: 16 + insets.top }] }>
         <View style={styles.form}>
           {image?.uri ? (
             <View style={[styles.hero, { marginTop: -insets.top, marginHorizontal: -16 }] }>
@@ -250,7 +251,7 @@ export default function AddCatchScreen() {
           ) : null}
           <Text style={styles.title}>Ajouter une prise</Text>
           {!!errors.species && <Text style={styles.errorText}>{errors.species}</Text>}
-          <TextInput placeholder="Esp��ce (obligatoire)" value={species} onChangeText={(t) => { setSpecies(t); if (errors.species) setErrors((e) => ({ ...e, species: undefined })); }} onFocus={() => setSpeciesFocused(true)} onBlur={() => setTimeout(() => setSpeciesFocused(false), 120)} style={[styles.input, errors.species && styles.inputError]} autoCapitalize="words" autoCorrect={false} />
+          <TextInput placeholder="Esp��ce (obligatoire)" placeholderTextColor="#9CA3AF" value={species} onChangeText={(t) => { setSpecies(t); if (errors.species) setErrors((e) => ({ ...e, species: undefined })); }} onFocus={() => setSpeciesFocused(true)} onBlur={() => setTimeout(() => setSpeciesFocused(false), 120)} style={[styles.input, errors.species && styles.inputError]} autoCapitalize="words" autoCorrect={false} />
           {speciesFocused && !!species.trim() && !!speciesSuggestions.length && (
             <View style={styles.suggestions}>
               {speciesSuggestions.map((s, i) => (
@@ -260,11 +261,11 @@ export default function AddCatchScreen() {
               ))}
             </View>
           )}
-          <TextInput placeholder="Poids (kg)*" value={weight} onChangeText={(t) => { setWeight(t); if (errors.weight) setErrors((e) => ({ ...e, weight: undefined })); }} style={[styles.input, errors.weight && styles.inputError]} keyboardType="decimal-pad" />
+          <TextInput placeholder="Poids (kg)*" placeholderTextColor="#9CA3AF" value={weight} onChangeText={(t) => { setWeight(t); if (errors.weight) setErrors((e) => ({ ...e, weight: undefined })); }} style={[styles.input, errors.weight && styles.inputError]} keyboardType="decimal-pad" />
           {!!errors.weight && <Text style={styles.errorText}>{errors.weight}</Text>}
-          <TextInput placeholder="Taille (cm)*" value={length} onChangeText={(t) => { setLength(t); if (errors.length) setErrors((e) => ({ ...e, length: undefined })); }} style={[styles.input, errors.length && styles.inputError]} keyboardType="decimal-pad" />
+          <TextInput placeholder="Taille (cm)*" placeholderTextColor="#9CA3AF" value={length} onChangeText={(t) => { setLength(t); if (errors.length) setErrors((e) => ({ ...e, length: undefined })); }} style={[styles.input, errors.length && styles.inputError]} keyboardType="decimal-pad" />
           {!!errors.length && <Text style={styles.errorText}>{errors.length}</Text>}
-          <TextInput placeholder="Notes (optionnel)" value={notes} onChangeText={setNotes} style={[styles.input, { height: 100 }]} multiline />
+          <TextInput placeholder="Notes (optionnel)" placeholderTextColor="#9CA3AF" value={notes} onChangeText={setNotes} style={[styles.input, { height: 100 }]} multiline />
 
           {image?.uri ? (
             <Pressable onPress={() => setImage(null)} style={[styles.secondaryButton]}>
@@ -321,7 +322,5 @@ const styles = StyleSheet.create({
   previewRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   preview: { width: 120, height: 120, borderRadius: 8, backgroundColor: '#eee' },
 });
-
-
 
 
