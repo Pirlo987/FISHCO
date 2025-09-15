@@ -1,9 +1,10 @@
 import React from 'react';
-import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/AuthProvider';
 import { Image } from 'expo-image';
 import { ThemedSafeArea } from '@/components/SafeArea';
+import { useRouter } from 'expo-router';
 
 type Catch = {
   id: string;
@@ -16,6 +17,7 @@ type Catch = {
 };
 
 export default function HistoryScreen() {
+  const router = useRouter();
   const { session } = useAuth();
   const [data, setData] = React.useState<Catch[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -74,18 +76,20 @@ export default function HistoryScreen() {
       renderItem={({ item }) => {
         const url = urlFromPhotoPath(item.photo_path);
         return (
-          <View style={styles.row}>
-            {url ? <Image source={{ uri: url }} style={styles.thumb} contentFit="cover" /> : null}
-            <View style={{ flex: 1 }}>
-              <Text style={styles.species}>{item.species}</Text>
-              <Text style={styles.meta}>
-                {new Date(item.caught_at).toLocaleString()}
-                {item.weight_kg ? ` · ${item.weight_kg} kg` : ''}
-                {item.length_cm ? ` · ${item.length_cm} cm` : ''}
-              </Text>
-              {item.notes ? <Text numberOfLines={2} style={styles.notes}>{item.notes}</Text> : null}
+          <Pressable onPress={() => router.push({ pathname: '/catches/[id]', params: { id: item.id } })}>
+            <View style={styles.row}>
+              {url ? <Image source={{ uri: url }} style={styles.thumb} contentFit="cover" /> : null}
+              <View style={{ flex: 1 }}>
+                <Text style={styles.species}>{item.species}</Text>
+                <Text style={styles.meta}>
+                  {new Date(item.caught_at).toLocaleString()}
+                  {item.weight_kg ? ` · ${item.weight_kg} kg` : ''}
+                  {item.length_cm ? ` · ${item.length_cm} cm` : ''}
+                </Text>
+                {item.notes ? <Text numberOfLines={2} style={styles.notes}>{item.notes}</Text> : null}
+              </View>
             </View>
-          </View>
+          </Pressable>
         );
       }}
     />
