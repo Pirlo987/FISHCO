@@ -1,6 +1,5 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/providers/AuthProvider';
 import { ThemedSafeArea } from '@/components/SafeArea';
@@ -10,8 +9,9 @@ export default function OnboardingScreen() {
   const { session } = useAuth();
 
   const onStart = async () => {
-    await AsyncStorage.setItem('onboarding_seen', '1');
-    router.replace(session ? '/(tabs)' : '/(auth)/login');
+    // Ne pas marquer onboarding_seen ici: on le fera après la première étape profil.
+    if (session) router.replace('/(onboarding)/name');
+    else router.replace('/(auth)/login');
   };
 
   return (

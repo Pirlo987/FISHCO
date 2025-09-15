@@ -10,9 +10,11 @@ import { ThemedText } from '@/components/ThemedText';
 import { supabase } from '@/lib/supabase';
 import { normalizeName } from '@/constants/species';
 import ParallaxScrollView from '@/components/ParallaxScrollView';
-import { IconSymbol } from '@/components/ui/IconSymbol';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { events } from '@/lib/events';
 import { useAuth } from '@/providers/AuthProvider';
+import WorldMiniMap from '@/components/WorldMiniMap';
+import { parseRegionToTags } from '@/constants/regionTags';
 
 type SpeciesRecord = Record<string, any> & {
   // Names
@@ -256,6 +258,12 @@ export default function SpeciesDetailScreen() {
   const sciName = getField('Nom scientifique');
   const enName = getField('English common name');
   const region = getField('Region / Stock', ' Region / Stock', 'Région / Stock');
+  const regionTags = React.useMemo(() => {
+    const fromRegion = parseRegionToTags(region ? String(region) : '');
+    if (fromRegion.length) return fromRegion;
+    // Fallback: try to infer from display name (e.g., "Saumon atlantique")
+    return parseRegionToTags(displayName || '');
+  }, [region, displayName]);
   const season = getField('Saison optimale');
   const methods = getField('methodes de peche', 'Méthodes de pêche');
   const baits = getField('Appats', 'Appâts');
@@ -284,7 +292,7 @@ export default function SpeciesDetailScreen() {
                 </View>
               )}
               <Pressable onPress={() => router.back()} style={[styles.backBtn, { top: 12 + insets.top }]} hitSlop={10}>
-                <IconSymbol name="chevron.left" size={22} color="#111" />
+                <Ionicons name="chevron-back" size={26} color="#000" />
               </Pressable>
             </View>
           }>
@@ -330,6 +338,10 @@ export default function SpeciesDetailScreen() {
 
           {activeTab === 'infos' ? (
             <View style={styles.section}>
+              <View style={{ gap: 6 }}>
+                <Text style={styles.label}>Zones de présence</Text>
+                <WorldMiniMap tags={regionTags} height={140} />
+              </View>
               {!!enName && (
                 <Text style={styles.row}><Text style={styles.label}>Nom anglais: </Text>{String(enName)}</Text>
               )}
@@ -413,6 +425,7 @@ const styles = StyleSheet.create({
     width: 36,
     borderRadius: 18,
     backgroundColor: 'rgba(255,255,255,0.9)',
+    zIndex: 2,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -429,6 +442,7 @@ type CatchItem = {
 };
 
 function CatchRow({ item, urlFromPhotoPath }: { item: CatchItem; urlFromPhotoPath: (p?: string | null) => Promise<string | null> }) {
+  const router = useRouter();
   const [url, setUrl] = React.useState<string | null>(null);
   React.useEffect(() => {
     let mounted = true;
@@ -441,8 +455,18 @@ function CatchRow({ item, urlFromPhotoPath }: { item: CatchItem; urlFromPhotoPat
     };
   }, [item.photo_path, urlFromPhotoPath]);
   return (
-    <View style={{ paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: '#ddd', gap: 10, flexDirection: 'row' }}>
-      {url ? <Image source={{ uri: url }} style={{ width: 56, height: 56, borderRadius: 8, backgroundColor: '#eee' }} contentFit="cover" /> : null}
+    <Pressable
+      accessibilityRole="button"
+      onPress={() => router.push({ pathname: '/catches/[id]', params: { id: item.id } })}
+      style={{ paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: '#ddd', gap: 10, flexDirection: 'row' }}
+    >
+      {url ? (
+        <Image
+          source={{ uri: url }}
+          style={{ width: 56, height: 56, borderRadius: 8, backgroundColor: '#eee' }}
+          contentFit="cover"
+        />
+      ) : null}
       <View style={{ flex: 1 }}>
         <Text style={{ fontWeight: '600' }}>{item.species}</Text>
         <Text style={{ color: '#666', marginTop: 2 }}>
@@ -450,8 +474,12 @@ function CatchRow({ item, urlFromPhotoPath }: { item: CatchItem; urlFromPhotoPat
           {item.weight_kg ? ` · ${item.weight_kg} kg` : ''}
           {item.length_cm ? ` · ${item.length_cm} cm` : ''}
         </Text>
-        {item.notes ? <Text numberOfLines={2} style={{ marginTop: 4 }}>{item.notes}</Text> : null}
+        {item.notes ? (
+          <Text numberOfLines={2} style={{ marginTop: 4 }}>
+            {item.notes}
+          </Text>
+        ) : null}
       </View>
-    </View>
+    </Pressable>
   );
 }
