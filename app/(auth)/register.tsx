@@ -26,15 +26,15 @@ export default function RegisterScreen() {
       Alert.alert('Inscription échouée', error.message);
       return;
     }
-    // Si email confirmation désactivée: session présente => commencer l'onboarding profil.
-    // Sinon: alerte et retour login après confirmation.
-    if (data.session) {
-      await AsyncStorage.setItem('profile_onboarding_pending', '1');
-      router.replace('/(onboarding)/name');
-    } else {
-      Alert.alert('Vérification requise', 'Vérifie tes emails pour confirmer ton compte.');
-      router.replace('/(auth)/login');
+    // Démarrer l'onboarding directement, même si la session n'est pas encore active
+    await AsyncStorage.setItem('profile_onboarding_pending', '1');
+    if (!data.session) {
+      Alert.alert(
+        'Vérification requise',
+        "Vérifie tes emails pour confirmer ton compte. Tu pourras terminer l'onboarding après connexion."
+      );
     }
+    router.replace('/(onboarding)/name');
   };
 
   return (
@@ -42,7 +42,7 @@ export default function RegisterScreen() {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <ScrollView keyboardShouldPersistTaps="always" contentContainerStyle={styles.container}>
           <View style={styles.header}>
-            <Text style={styles.appEmoji}>🐟</Text>
+            <Text style={styles.appEmoji}>🎣</Text>
             <Text style={styles.appTitle}>Fishco</Text>
           </View>
 
@@ -152,3 +152,4 @@ const styles = StyleSheet.create({
   sepText: { color: '#9CA3AF', fontSize: 12 },
   bottomText: { textAlign: 'center', marginTop: 8 },
 });
+
