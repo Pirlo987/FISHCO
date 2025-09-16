@@ -1,33 +1,60 @@
 import React from 'react';
-import { Alert, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View, FlatList } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { ThemedSafeArea } from '@/components/SafeArea';
+import { COUNTRIES, findCountryByName, iso2ToFlag, Country } from '@/lib/countries';
 
 export default function CountryStep() {
   const router = useRouter();
-  const [country, setCountry] = React.useState('');
+  const [input, setInput] = React.useState('');
+  const [selected, setSelected] = React.useState<Country | null>(null);
+  const [showList, setShowList] = React.useState(false);
 
   React.useEffect(() => {
     AsyncStorage.getItem('profile_draft').then((v) => {
       if (!v) return;
       try {
         const d = JSON.parse(v);
-        if (d.country) setCountry(d.country);
+        if (d.country) {
+          const found = findCountryByName(d.country);
+          if (found) {
+            setInput(found.name);
+            setSelected(found);
+          } else {
+            setInput(String(d.country));
+          }
+        }
       } catch {}
     });
   }, []);
 
   const onNext = async () => {
-    if (!country) {
+    const cleaned = input.trim();
+    if (!cleaned) {
       Alert.alert('Champ requis', 'Merci d’indiquer ton pays de résidence.');
       return;
     }
-    await AsyncStorage.mergeItem('profile_draft', JSON.stringify({ country }));
-    router.push('/(onboarding)/level');
+    let country: Country | undefined = selected ?? findCountryByName(cleaned);
+    if (!country) {
+      const loose = COUNTRIES.find((c) => c.name.toLowerCase() === cleaned.toLowerCase());
+      if (loose) country = loose;
+    }
+    if (!country) {
+      Alert.alert('Sélection requise', 'Choisis un pays dans la liste.');
+      return;
+    }
+    await AsyncStorage.mergeItem('profile_draft', JSON.stringify({ country: country.name, dialCode: country.dialCode }));
+    router.push('/(onboarding)/phone');
   };
 
   const onBack = () => router.back();
+
+  const filtered = React.useMemo(() => {
+    const q = input.trim().toLowerCase();
+    if (!q) return COUNTRIES.slice(0, 20);
+    return COUNTRIES.filter((c) => c.name.toLowerCase().includes(q)).slice(0, 20);
+  }, [input]);
 
   return (
     <ThemedSafeArea>
@@ -36,14 +63,48 @@ export default function CountryStep() {
           <Text style={styles.title}>Pays de résidence</Text>
           <Text style={styles.subtitle}>Où habites-tu ?</Text>
 
-          <TextInput
-            placeholder="Pays (ex: France)"
-            placeholderTextColor="#9CA3AF"
-            color="#111827"
-            value={country}
-            onChangeText={setCountry}
-            style={styles.input}
-          />
+          <View style={{ position: 'relative' }}>
+            <TextInput
+              placeholder="Pays (ex: France)"
+              placeholderTextColor="#9CA3AF"
+              color="#111827"
+              value={input}
+              onChangeText={(t) => {
+                setInput(t);
+                setSelected(null);
+                setShowList(true);
+              }}
+              onFocus={() => setShowList(true)}
+              style={styles.input}
+            />
+            {showList && (
+              <View style={styles.dropdown}>
+                <FlatList
+                  keyboardShouldPersistTaps="always"
+                  data={filtered}
+                  keyExtractor={(item) => item.iso2}
+                  renderItem={({ item }) => (
+                    <Pressable
+                      style={styles.dropdownItem}
+                      onPress={() => {
+                        setSelected(item);
+                        setInput(item.name);
+                        setShowList(false);
+                      }}
+                    >
+                      <Text style={styles.dropdownText}>
+                        {iso2ToFlag(item.iso2)}  {item.name}  <Text style={{ color: '#6B7280' }}>{item.dialCode}</Text>
+                      </Text>
+                    </Pressable>
+                  )}
+                />
+              </View>
+            )}
+          </View>
+
+          {selected && (
+            <Text style={{ color: '#6B7280' }}>Indicatif: {iso2ToFlag(selected.iso2)} {selected.dialCode}</Text>
+          )}
 
           <View style={styles.row}>
             <Pressable style={[styles.button, styles.secondary]} onPress={onBack}>
@@ -70,4 +131,19 @@ const styles = StyleSheet.create({
   secondary: { backgroundColor: '#F3F4F6' },
   buttonText: { color: 'white', fontWeight: '700' },
   secondaryText: { color: '#111827', fontWeight: '600' },
+  dropdown: {
+    position: 'absolute',
+    top: 56,
+    left: 0,
+    right: 0,
+    maxHeight: 220,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 10,
+    zIndex: 10,
+  },
+  dropdownItem: { paddingVertical: 10, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
+  dropdownText: { color: '#111827' },
 });
+

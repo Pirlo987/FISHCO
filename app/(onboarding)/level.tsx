@@ -3,7 +3,6 @@ import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { ThemedSafeArea } from '@/components/SafeArea';
-import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/AuthProvider';
 
 const LEVELS = ['Débutant', 'Intermédiaire', 'Expérimenté', 'Expert'] as const;
@@ -36,35 +35,15 @@ export default function LevelStep() {
 
     if (!session?.user?.id) {
       await AsyncStorage.setItem('profile_draft', JSON.stringify(payload));
-      Alert.alert('Connexion requise', 'Connecte-toi pour enregistrer ton profil.');
+      Alert.alert('Connexion requise', 'Connecte-toi pour continuer.');
       router.replace('/(auth)/login');
       return;
     }
 
     setSubmitting(true);
-    const row = {
-      id: session.user.id,
-      first_name: payload.firstName ?? null,
-      last_name: payload.lastName ?? null,
-      dob: payload.dob ?? null,
-      country: payload.country ?? null,
-      fishing_level: payload.level ?? null,
-      updated_at: new Date().toISOString(),
-    };
-
-    const { error: upsertErr } = await supabase.from('profiles').upsert(row);
-
+    await AsyncStorage.setItem('profile_draft', JSON.stringify(payload));
     setSubmitting(false);
-
-    if (upsertErr) {
-      const msg = upsertErr.message || 'Erreur inconnue';
-      Alert.alert('Enregistrement du profil impossible', `${msg}\n\nAssure-toi que la table 'profiles' existe bien dans le schéma public et que les policies RLS permettent l'upsert par l'utilisateur courant.`);
-      return;
-    }
-
-    await AsyncStorage.removeItem('profile_draft');
-    await AsyncStorage.removeItem('profile_onboarding_pending');
-    router.replace('/(tabs)');
+    router.push('/(onboarding)/username');
   };
 
   const onBack = () => router.back();
@@ -93,7 +72,7 @@ export default function LevelStep() {
               <Text style={styles.secondaryText}>Retour</Text>
             </Pressable>
             <Pressable style={styles.button} onPress={onSave} disabled={submitting}>
-              <Text style={styles.buttonText}>{submitting ? 'Enregistrement…' : 'Terminer'}</Text>
+              <Text style={styles.buttonText}>{submitting ? 'Chargement…' : 'Continuer'}</Text>
             </Pressable>
           </View>
         </View>
@@ -118,3 +97,4 @@ const styles = StyleSheet.create({
   buttonText: { color: 'white', fontWeight: '700' },
   secondaryText: { color: '#111827', fontWeight: '600' },
 });
+
