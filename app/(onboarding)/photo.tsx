@@ -1,5 +1,14 @@
 import React from 'react';
-import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { ThemedSafeArea } from '@/components/SafeArea';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
@@ -10,6 +19,7 @@ import { Image } from 'expo-image';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as FileSystem from 'expo-file-system/legacy';
 import { decode } from 'base64-arraybuffer';
+import { clearProfileDraft, readProfileDraft } from '@/lib/profileDraft';
 
 export default function PhotoStep() {
   const router = useRouter();
@@ -18,7 +28,7 @@ export default function PhotoStep() {
   const [loading, setLoading] = React.useState(false);
 
   React.useEffect(() => {
-    // prefill from draft if you want later
+    // Pré-remplissage possible à implémenter plus tard.
   }, []);
 
   const ensureLibraryPermission = React.useCallback(async () => {
@@ -74,7 +84,6 @@ export default function PhotoStep() {
   const uploadAvatar = async (localUri: string, ext: string, contentType: string, userId: string) => {
     const stamp = new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 14);
     const rand = Math.random().toString(36).slice(2, 8);
-    // Store inside the 'avatars' bucket under a per-user folder: {userId}/...
     const filePath = `${userId}/${stamp}-${rand}.${ext}`;
 
     const info = await FileSystem.getInfoAsync(localUri);
@@ -98,8 +107,8 @@ export default function PhotoStep() {
       Alert.alert('Connexion requise', 'Connecte-toi pour terminer.');
       return;
     }
-    const raw = await AsyncStorage.getItem('profile_draft');
-    const d = raw ? JSON.parse(raw) : {};
+    const draft = await readProfileDraft(session);
+    const d = draft ?? {};
     const rowBase: any = {
       id: session.user.id,
       first_name: d.firstName ?? null,
@@ -112,7 +121,6 @@ export default function PhotoStep() {
     };
     if (d.phone) rowBase.phone = d.phone;
 
-    // Try avatar_url, then avatar_path, then photo_url, then photo_path
     const tryUpserts: any[] = [];
     if (avatar?.publicUrl) tryUpserts.push({ ...rowBase, avatar_url: avatar.publicUrl });
     if (avatar?.path) tryUpserts.push({ ...rowBase, avatar_path: avatar.path });
@@ -123,12 +131,15 @@ export default function PhotoStep() {
     let lastErr: any = null;
     for (const payload of tryUpserts) {
       const { error } = await supabase.from('profiles').upsert(payload);
-      if (!error) { lastErr = null; break; }
+      if (!error) {
+        lastErr = null;
+        break;
+      }
       lastErr = error;
     }
     if (lastErr) throw lastErr;
 
-    await AsyncStorage.removeItem('profile_draft');
+    await clearProfileDraft();
     await AsyncStorage.removeItem('profile_onboarding_pending');
     await AsyncStorage.setItem('profile_onboarding_done', '1');
     await AsyncStorage.setItem('onboarding_seen', '1');
@@ -184,11 +195,29 @@ export default function PhotoStep() {
             {image?.uri ? (
               <Image
                 source={{ uri: image.uri }}
-                style={{ width: 160, height: 160, borderRadius: 80, alignSelf: 'center', marginVertical: 10, backgroundColor: '#F3F4F6' }}
+                style={{
+                  width: 160,
+                  height: 160,
+                  borderRadius: 80,
+                  alignSelf: 'center',
+                  marginVertical: 10,
+                  backgroundColor: '#F3F4F6',
+                }}
                 contentFit="cover"
               />
             ) : (
-              <View style={{ width: 160, height: 160, borderRadius: 80, alignSelf: 'center', marginVertical: 10, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center' }}>
+              <View
+                style={{
+                  width: 160,
+                  height: 160,
+                  borderRadius: 80,
+                  alignSelf: 'center',
+                  marginVertical: 10,
+                  backgroundColor: '#F3F4F6',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
                 <Text style={{ color: '#9CA3AF' }}>Aperçu</Text>
               </View>
             )}
@@ -219,11 +248,26 @@ export default function PhotoStep() {
 
 const styles = StyleSheet.create({
   container: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', padding: 20 },
-  card: { width: '100%', maxWidth: 480, gap: 12, backgroundColor: '#fff', borderRadius: 14, padding: 18, borderWidth: 1, borderColor: '#E5E7EB' },
+  card: {
+    width: '100%',
+    maxWidth: 480,
+    gap: 12,
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
   title: { fontSize: 22, fontWeight: '700' },
   subtitle: { color: '#6B7280', marginBottom: 6 },
   row: { flexDirection: 'row', gap: 10 },
-  button: { flex: 1, backgroundColor: '#1e90ff', padding: 14, borderRadius: 10, alignItems: 'center' },
+  button: {
+    flex: 1,
+    backgroundColor: '#1e90ff',
+    padding: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
   secondary: { backgroundColor: '#F3F4F6' },
   buttonText: { color: 'white', fontWeight: '700' },
   secondaryText: { color: '#111827', fontWeight: '600' },

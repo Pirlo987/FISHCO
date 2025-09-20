@@ -1,33 +1,60 @@
 import React from 'react';
-import { Alert, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View, FlatList } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+  FlatList,
+} from 'react-native';
 import { useRouter } from 'expo-router';
 import { ThemedSafeArea } from '@/components/SafeArea';
+import { useAuth } from '@/providers/AuthProvider';
 import { COUNTRIES, findCountryByName, iso2ToFlag, Country } from '@/lib/countries';
+import { mergeProfileDraft, readProfileDraft } from '@/lib/profileDraft';
 
 export default function CountryStep() {
   const router = useRouter();
+  const { session } = useAuth();
   const [input, setInput] = React.useState('');
   const [selected, setSelected] = React.useState<Country | null>(null);
   const [showList, setShowList] = React.useState(false);
 
   React.useEffect(() => {
-    AsyncStorage.getItem('profile_draft').then((v) => {
-      if (!v) return;
-      try {
-        const d = JSON.parse(v);
-        if (d.country) {
-          const found = findCountryByName(d.country);
-          if (found) {
-            setInput(found.name);
-            setSelected(found);
-          } else {
-            setInput(String(d.country));
-          }
+    let mounted = true;
+    if (!session?.user?.id) {
+      setInput('');
+      setSelected(null);
+      return;
+    }
+    readProfileDraft(session).then((draft) => {
+      if (!mounted || !draft) return;
+      if (draft.country) {
+        const found = findCountryByName(String(draft.country));
+        if (found) {
+          setInput(found.name);
+          setSelected(found);
+          return;
         }
-      } catch {}
+        setInput(String(draft.country));
+        setSelected(null);
+      }
+      if (draft.dialCode && !draft.country) {
+        const best = COUNTRIES.find((c) => c.dialCode === draft.dialCode);
+        if (best) {
+          setInput(best.name);
+          setSelected(best);
+        }
+      }
     });
-  }, []);
+
+    return () => {
+      mounted = false;
+    };
+  }, [session?.user?.id]);
 
   const onNext = async () => {
     const cleaned = input.trim();
@@ -44,7 +71,10 @@ export default function CountryStep() {
       Alert.alert('Sélection requise', 'Choisis un pays dans la liste.');
       return;
     }
-    await AsyncStorage.mergeItem('profile_draft', JSON.stringify({ country: country.name, dialCode: country.dialCode }));
+    await mergeProfileDraft(session, {
+      country: country.name,
+      dialCode: country.dialCode,
+    });
     router.push('/(onboarding)/phone');
   };
 
@@ -58,7 +88,10 @@ export default function CountryStep() {
 
   return (
     <ThemedSafeArea>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.container}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.container}
+      >
         <View style={styles.card}>
           <Text style={styles.title}>Pays de résidence</Text>
           <Text style={styles.subtitle}>Où habites-tu ?</Text>
@@ -86,14 +119,19 @@ export default function CountryStep() {
                   renderItem={({ item }) => (
                     <Pressable
                       style={styles.dropdownItem}
-                      onPress={() => {
+                      onPress={async () => {
                         setSelected(item);
                         setInput(item.name);
                         setShowList(false);
+                        await mergeProfileDraft(session, {
+                          country: item.name,
+                          dialCode: item.dialCode,
+                        });
                       }}
                     >
                       <Text style={styles.dropdownText}>
-                        {iso2ToFlag(item.iso2)}  {item.name}  <Text style={{ color: '#6B7280' }}>{item.dialCode}</Text>
+                        {iso2ToFlag(item.iso2)}  {item.name}{' '}
+                        <Text style={{ color: '#6B7280' }}>{item.dialCode}</Text>
                       </Text>
                     </Pressable>
                   )}
@@ -103,7 +141,9 @@ export default function CountryStep() {
           </View>
 
           {selected && (
-            <Text style={{ color: '#6B7280' }}>Indicatif: {iso2ToFlag(selected.iso2)} {selected.dialCode}</Text>
+            <Text style={{ color: '#6B7280' }}>
+              Indicatif: {iso2ToFlag(selected.iso2)} {selected.dialCode}
+            </Text>
           )}
 
           <View style={styles.row}>
@@ -122,12 +162,33 @@ export default function CountryStep() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 20 },
-  card: { width: '100%', maxWidth: 480, gap: 12, backgroundColor: '#fff', borderRadius: 14, padding: 18, borderWidth: 1, borderColor: '#E5E7EB' },
+  card: {
+    width: '100%',
+    maxWidth: 480,
+    gap: 12,
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
   title: { fontSize: 22, fontWeight: '700' },
   subtitle: { color: '#6B7280', marginBottom: 6 },
-  input: { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10, padding: 12 },
+  input: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 10,
+    padding: 12,
+  },
   row: { flexDirection: 'row', gap: 10 },
-  button: { flex: 1, backgroundColor: '#1e90ff', padding: 14, borderRadius: 10, alignItems: 'center' },
+  button: {
+    flex: 1,
+    backgroundColor: '#1e90ff',
+    padding: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
   secondary: { backgroundColor: '#F3F4F6' },
   buttonText: { color: 'white', fontWeight: '700' },
   secondaryText: { color: '#111827', fontWeight: '600' },
@@ -143,7 +204,11 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     zIndex: 10,
   },
-  dropdownItem: { paddingVertical: 10, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
+  dropdownItem: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
   dropdownText: { color: '#111827' },
 });
-

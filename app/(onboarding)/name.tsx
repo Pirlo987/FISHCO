@@ -1,18 +1,29 @@
 import React from 'react';
-import { Alert, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
+import { useAuth } from '@/providers/AuthProvider';
 import { ThemedSafeArea } from '@/components/SafeArea';
+import { mergeProfileDraft, readProfileDraft } from '@/lib/profileDraft';
 
 export default function NameStep() {
   const router = useRouter();
+  const { session } = useAuth();
   const [firstName, setFirstName] = React.useState('');
   const [lastName, setLastName] = React.useState('');
   const [dob, setDob] = React.useState('');
   const [dobDate, setDobDate] = React.useState<Date | null>(null);
   const [showPicker, setShowPicker] = React.useState(false);
 
-  // Optional native date picker (fallback to text input if not installed)
   let DateTimePicker: any = null;
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -27,27 +38,38 @@ export default function NameStep() {
   };
 
   React.useEffect(() => {
-    // Load any existing draft
-    AsyncStorage.getItem('profile_draft').then((v) => {
-      if (!v) return;
-      try {
-        const d = JSON.parse(v);
-        if (d.firstName) setFirstName(d.firstName);
-        if (d.lastName) setLastName(d.lastName);
-        if (d.dob) {
-          setDob(d.dob);
-          const parts = String(d.dob).split('-');
-          if (parts.length === 3) {
-            const year = Number(parts[0]);
-            const month = Number(parts[1]) - 1;
-            const day = Number(parts[2]);
-            const maybe = new Date(year, month, day);
-            if (!isNaN(maybe.getTime())) setDobDate(maybe);
+    let mounted = true;
+    if (!session?.user?.id) {
+      setFirstName('');
+      setLastName('');
+      setDob('');
+      setDobDate(null);
+      return;
+    }
+
+    readProfileDraft(session).then((draft) => {
+      if (!mounted || !draft) return;
+      setFirstName(draft.firstName ? String(draft.firstName) : '');
+      setLastName(draft.lastName ? String(draft.lastName) : '');
+      const storedDob = draft.dob ? String(draft.dob) : '';
+      setDob(storedDob);
+      if (storedDob) {
+        const parts = storedDob.split('-').map((part) => Number(part));
+        if (parts.length === 3 && !parts.some((v) => Number.isNaN(v))) {
+          const maybe = new Date(parts[0], parts[1] - 1, parts[2]);
+          if (!Number.isNaN(maybe.getTime())) {
+            setDobDate(maybe);
+            return;
           }
         }
-      } catch {}
+      }
+      setDobDate(null);
     });
-  }, []);
+
+    return () => {
+      mounted = false;
+    };
+  }, [session?.user?.id]);
 
   const onNext = async () => {
     const finalDob = dobDate ? formatDate(dobDate) : dob;
@@ -55,20 +77,21 @@ export default function NameStep() {
       Alert.alert('Champs requis', 'Merci de remplir nom, prénom et date de naissance.');
       return;
     }
-    // naive YYYY-MM-DD check
     if (!dobDate && !/^\d{4}-\d{2}-\d{2}$/.test(finalDob)) {
       Alert.alert('Format date', 'Utilise le format YYYY-MM-DD (ex: 1990-05-12).');
       return;
     }
-    await AsyncStorage.mergeItem('profile_draft', JSON.stringify({ firstName, lastName, dob: finalDob }));
-    // Mark intro onboarding as seen to avoid forced redirect
+    await mergeProfileDraft(session, { firstName, lastName, dob: finalDob });
     await AsyncStorage.setItem('onboarding_seen', '1');
     router.push('/(onboarding)/country');
   };
 
   return (
     <ThemedSafeArea>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.container}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.container}
+      >
         <View style={styles.card}>
           <Text style={styles.title}>Tes informations</Text>
           <Text style={styles.subtitle}>Nom, prénom et date de naissance</Text>
@@ -137,10 +160,30 @@ export default function NameStep() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 20 },
-  card: { width: '100%', maxWidth: 480, gap: 12, backgroundColor: '#fff', borderRadius: 14, padding: 18, borderWidth: 1, borderColor: '#E5E7EB' },
+  card: {
+    width: '100%',
+    maxWidth: 480,
+    gap: 12,
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
   title: { fontSize: 22, fontWeight: '700' },
   subtitle: { color: '#6B7280', marginBottom: 6 },
-  input: { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10, padding: 12 },
-  button: { backgroundColor: '#1e90ff', padding: 14, borderRadius: 10, alignItems: 'center' },
+  input: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 10,
+    padding: 12,
+  },
+  button: {
+    backgroundColor: '#1e90ff',
+    padding: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
   buttonText: { color: 'white', fontWeight: '700' },
 });

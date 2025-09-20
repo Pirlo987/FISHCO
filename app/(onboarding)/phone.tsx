@@ -1,12 +1,24 @@
 import React from 'react';
-import { Alert, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View, FlatList } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+  FlatList,
+} from 'react-native';
 import { useRouter } from 'expo-router';
 import { ThemedSafeArea } from '@/components/SafeArea';
+import { useAuth } from '@/providers/AuthProvider';
 import { COUNTRIES, findCountryByName, iso2ToFlag, Country } from '@/lib/countries';
+import { mergeProfileDraft, readProfileDraft } from '@/lib/profileDraft';
 
 export default function PhoneStep() {
   const router = useRouter();
+  const { session } = useAuth();
   const [phone, setPhone] = React.useState('');
   const [dialCode, setDialCode] = React.useState('');
   const [country, setCountry] = React.useState('');
@@ -15,24 +27,34 @@ export default function PhoneStep() {
   const [selected, setSelected] = React.useState<Country | null>(null);
 
   React.useEffect(() => {
-    AsyncStorage.getItem('profile_draft').then((v) => {
-      if (!v) return;
-      try {
-        const d = JSON.parse(v);
-        if (d.phone) setPhone(String(d.phone));
-        if (d.country) {
-          const found = findCountryByName(d.country);
-          if (found) setSelected(found);
-          setCountry(d.country);
-        }
-        if (d.dialCode) setDialCode(String(d.dialCode));
-        else if (d.country) {
-          const found = findCountryByName(d.country);
-          if (found) setDialCode(found.dialCode);
-        }
-      } catch {}
+    let mounted = true;
+    if (!session?.user?.id) {
+      setPhone('');
+      setDialCode('');
+      setCountry('');
+      setSelected(null);
+      return;
+    }
+    readProfileDraft(session).then((draft) => {
+      if (!mounted || !draft) return;
+      if (draft.phone) setPhone(String(draft.phone));
+      if (draft.country) {
+        const found = findCountryByName(String(draft.country));
+        if (found) setSelected(found);
+        setCountry(String(draft.country));
+      }
+      if (draft.dialCode) {
+        setDialCode(String(draft.dialCode));
+      } else if (draft.country) {
+        const found = findCountryByName(String(draft.country));
+        if (found) setDialCode(found.dialCode);
+      }
     });
-  }, []);
+
+    return () => {
+      mounted = false;
+    };
+  }, [session?.user?.id]);
 
   const onNext = async () => {
     const trimmed = phone.trim();
@@ -50,7 +72,7 @@ export default function PhoneStep() {
       return;
     }
     const full = `${dialCode}${digits}`;
-    await AsyncStorage.mergeItem('profile_draft', JSON.stringify({ phone: full, dialCode, country }));
+    await mergeProfileDraft(session, { phone: full, dialCode, country });
     router.push('/(onboarding)/level');
   };
 
@@ -64,7 +86,10 @@ export default function PhoneStep() {
 
   return (
     <ThemedSafeArea>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.container}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.container}
+      >
         <View style={styles.card}>
           <Text style={styles.title}>Ton numéro de téléphone</Text>
           <Text style={styles.subtitle}>Il peut aider à sécuriser ton compte</Text>
@@ -104,17 +129,21 @@ export default function PhoneStep() {
                   renderItem={({ item }) => (
                     <Pressable
                       style={styles.pickerItem}
-                      onPress={() => {
+                      onPress={async () => {
                         setSelected(item);
                         setDialCode(item.dialCode);
                         setCountry(item.name);
                         setCountryOpen(false);
                         setCountryQuery('');
-                        AsyncStorage.mergeItem('profile_draft', JSON.stringify({ country: item.name, dialCode: item.dialCode }));
+                        await mergeProfileDraft(session, {
+                          country: item.name,
+                          dialCode: item.dialCode,
+                        });
                       }}
                     >
                       <Text style={styles.dropdownText}>
-                        {iso2ToFlag(item.iso2)}  {item.name}  <Text style={{ color: '#6B7280' }}>{item.dialCode}</Text>
+                        {iso2ToFlag(item.iso2)}  {item.name}{' '}
+                        <Text style={{ color: '#6B7280' }}>{item.dialCode}</Text>
                       </Text>
                     </Pressable>
                   )}
@@ -139,12 +168,34 @@ export default function PhoneStep() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 20 },
-  card: { width: '100%', maxWidth: 480, gap: 12, backgroundColor: '#fff', borderRadius: 14, padding: 18, borderWidth: 1, borderColor: '#E5E7EB' },
+  card: {
+    width: '100%',
+    maxWidth: 480,
+    gap: 12,
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
   title: { fontSize: 22, fontWeight: '700' },
   subtitle: { color: '#6B7280', marginBottom: 6 },
-  input: { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10, padding: 12 },
+  input: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 10,
+    padding: 12,
+  },
   phoneRow: { flexDirection: 'row', gap: 8 },
-  dialCodeBox: { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10, paddingHorizontal: 10, justifyContent: 'center' },
+  dialCodeBox: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    justifyContent: 'center',
+  },
   dialCodeText: { color: '#111827', fontWeight: '600' },
   pickerPanel: {
     position: 'absolute',
@@ -158,12 +209,22 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     zIndex: 20,
   },
-  pickerItem: { paddingVertical: 10, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
+  pickerItem: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
   dropdownText: { color: '#111827' },
   row: { flexDirection: 'row', gap: 10 },
-  button: { flex: 1, backgroundColor: '#1e90ff', padding: 14, borderRadius: 10, alignItems: 'center' },
+  button: {
+    flex: 1,
+    backgroundColor: '#1e90ff',
+    padding: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
   secondary: { backgroundColor: '#F3F4F6' },
   buttonText: { color: 'white', fontWeight: '700' },
   secondaryText: { color: '#111827', fontWeight: '600' },
 });
-
