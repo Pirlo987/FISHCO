@@ -10,12 +10,21 @@ if (!supabaseUrl || !supabaseAnonKey) {
   console.warn('Supabase env vars are not set. Add EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY.');
 }
 
-export const supabase = createClient(supabaseUrl ?? '', supabaseAnonKey ?? '', {
-  auth: {
-    storage: AsyncStorage as any,
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: false,
-  },
-});
+const isBrowser = typeof window !== 'undefined';
 
+const authOptions = isBrowser
+  ? {
+      storage: AsyncStorage as any,
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: false,
+    }
+  : {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    };
+
+export const supabase = createClient(supabaseUrl ?? '', supabaseAnonKey ?? '', {
+  auth: authOptions,
+});
