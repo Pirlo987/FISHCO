@@ -16,6 +16,7 @@ type CatchRow = { species: string | null; photo_path: string | null };
 export default function ExploreScreen() {
   const router = useRouter();
   const { session } = useAuth();
+  const listRef = React.useRef<FlatList<Species> | null>(null);
   const [search, setSearch] = React.useState('');
   const [loading, setLoading] = React.useState(true);
   const [discovered, setDiscovered] = React.useState<Set<string>>(new Set());
@@ -23,11 +24,13 @@ export default function ExploreScreen() {
   const [discoveredFilter, setDiscoveredFilter] = React.useState<'all' | 'discovered' | 'undiscovered'>('all');
   const [onlyDbImage, setOnlyDbImage] = React.useState(false);
   const [onlyUserPhoto, setOnlyUserPhoto] = React.useState(false);
+  const [scrollTarget, setScrollTarget] = React.useState<string | null>(null);
 
   const { width } = useWindowDimensions();
   const padding = 16;
   const gap = 12;
   const tileW = Math.floor((width - padding * 2 - gap * 2) / 3);
+  const rowHeight = React.useMemo(() => tileW + 12 + 28, [tileW]);
 
   const SPECIES_BUCKET = process.env.EXPO_PUBLIC_SPECIES_BUCKET as string | undefined;
 
@@ -117,13 +120,38 @@ export default function ExploreScreen() {
     fetchDiscovered();
   }, [fetchDiscovered]);
 
+  React.useEffect(() => {
+    setScrollTarget(null);
+  }, [session?.user?.id]);
+
   // Ne plus rafraîchir sur focus; on écoute seulement les ajouts de prises
   React.useEffect(() => {
-    const off = events.on('catch:added', () => {
+    const off = events.on('catch:added', (payload) => {
+      const { species, normalized, target } = payload;
+      const key = normalized || (species ? normalizeName(species) : null);
+      setSearch('');
+      setDiscoveredFilter('all');
+      setOnlyDbImage(false);
+      setOnlyUserPhoto(false);
+      if (key) setScrollTarget(key);
+      if (target) {
+        setTimeout(() => {
+          try {
+            if (target.type === 'species') {
+              router.push({
+                pathname: '/species/[slug]',
+                params: { slug: target.slug, name: target.name ?? species ?? '' },
+              });
+            } else if (target.type === 'catch') {
+              router.push({ pathname: '/catches/[id]', params: { id: target.id } });
+            }
+          } catch {}
+        }, 50);
+      }
       fetchDiscovered();
     });
     return off;
-  }, [fetchDiscovered]);
+  }, [fetchDiscovered, router, setSearch, setDiscoveredFilter, setOnlyDbImage, setOnlyUserPhoto]);
 
   const [speciesList, setSpeciesList] = React.useState<Species[]>([]);
   // Variables conservées pour compat avec onEndReached (désactivé logiquement)
@@ -201,6 +229,41 @@ export default function ExploreScreen() {
     });
   }, [search, speciesList, discovered, discoveredFilter, onlyDbImage, onlyUserPhoto, photoBySpecies]);
 
+  React.useEffect(() => {
+    if (!scrollTarget) return;
+    const index = filtered.findIndex((s) => normalizeName(s.name) === scrollTarget);
+    if (index < 0) return;
+    const timer = setTimeout(() => {
+      if (!listRef.current) return;
+      try {
+        listRef.current.scrollToIndex({ index, animated: true });
+      } catch {
+        const row = Math.floor(index / 3);
+        listRef.current.scrollToOffset({ offset: row * rowHeight, animated: true });
+      }
+      setScrollTarget(null);
+    }, 120);
+    return () => clearTimeout(timer);
+  }, [scrollTarget, filtered, rowHeight]);
+
+  const getItemLayout = React.useCallback(
+    (_: Species[] | null | undefined, index: number) => {
+      const row = Math.floor(index / 3);
+      return { index, length: rowHeight, offset: row * rowHeight };
+    },
+    [rowHeight],
+  );
+
+  const onScrollToIndexFailed = React.useCallback(
+    (info: { index: number; averageItemLength: number }) => {
+      const row = Math.floor(info.index / 3);
+      const offset = row * rowHeight;
+      listRef.current?.scrollToOffset({ offset, animated: true });
+      setScrollTarget(null);
+    },
+    [rowHeight],
+  );
+
   return (
     <ThemedSafeArea>
     <ThemedView style={{ flex: 1 }}>
@@ -243,13 +306,16 @@ export default function ExploreScreen() {
         </View>
       ) : (
         <FlatList
+          ref={listRef}
           style={{ flex: 1 }}
           contentContainerStyle={{ padding: padding, paddingBottom: 24 }}
           data={filtered}
           keyExtractor={(item) => item.name}
           numColumns={3}
-            columnWrapperStyle={{ gap }}
-            onEndReached={() => {}}
+          columnWrapperStyle={{ gap }}
+          onEndReached={() => {}}
+          getItemLayout={getItemLayout}
+          onScrollToIndexFailed={onScrollToIndexFailed}
           renderItem={({ item }) => {
             const key = normalizeName(item.name);
             const isDiscovered = discovered.has(key);
@@ -258,23 +324,13 @@ export default function ExploreScreen() {
             const userPhoto = photoBySpecies[key] ?? null;
             const uri = item.image ?? (isDiscovered ? userPhoto ?? null : null);
             return (
-              <Pressable
+              <SpeciesTile
+                item={item}
+                tileWidth={tileW}
+                isDiscovered={isDiscovered}
                 onPress={() => router.push({ pathname: '/species/[slug]', params: { slug: key, name: item.name } })}
-                style={{ width: tileW, marginBottom: 12 }}
-              >
-                <View style={[styles.tile, !isDiscovered && styles.tileUndiscovered, { height: tileW }]}>
-                  {uri ? (
-                    <Image source={{ uri }} style={styles.tileImage} contentFit="cover" />
-                  ) : (
-                    <View style={styles.tilePlaceholder}>
-                      <Text style={styles.tileEmoji}>🐟</Text>
-                    </View>
-                  )}
-                </View>
-                <Text style={[styles.tileLabel, !isDiscovered && styles.tileLabelDim]} numberOfLines={1}>
-                  {isDiscovered ? item.name : '???'}
-                </Text>
-              </Pressable>
+                imageUri={uri}
+              />
             );
           }}
           ListEmptyComponent={() => (
@@ -288,6 +344,45 @@ export default function ExploreScreen() {
     </ThemedSafeArea>
   );
 }
+
+type SpeciesTileProps = {
+  item: Species;
+  tileWidth: number;
+  isDiscovered: boolean;
+  onPress: () => void;
+  imageUri: string | null;
+};
+
+const SpeciesTile = React.memo(function SpeciesTile({
+  item,
+  tileWidth,
+  isDiscovered,
+  onPress,
+  imageUri,
+}: SpeciesTileProps) {
+  return (
+    <Pressable onPress={onPress} style={{ width: tileWidth, marginBottom: 12 }}>
+      <View
+        style={[
+          styles.tile,
+          !isDiscovered && styles.tileUndiscovered,
+          { height: tileWidth },
+        ]}
+      >
+        {imageUri ? (
+          <Image source={{ uri: imageUri }} style={styles.tileImage} contentFit="cover" />
+        ) : (
+          <View style={styles.tilePlaceholder}>
+            <Text style={styles.tileEmoji}>🐟</Text>
+          </View>
+        )}
+      </View>
+      <Text style={[styles.tileLabel, !isDiscovered && styles.tileLabelDim]} numberOfLines={1}>
+        {isDiscovered ? item.name : '???'}
+      </Text>
+    </Pressable>
+  );
+});
 
 const styles = StyleSheet.create({
   header: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8, gap: 10 },

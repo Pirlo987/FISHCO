@@ -97,6 +97,7 @@ export default function SpeciesDetailScreen() {
     notes: string | null;
     caught_at: string;
     photo_path: string | null;
+    region?: string | null;
   }>>([]);
   const [loadingCatches, setLoadingCatches] = React.useState(false);
   const stats = React.useMemo(() => {
@@ -439,6 +440,7 @@ type CatchItem = {
   notes: string | null;
   caught_at: string;
   photo_path: string | null;
+  region?: string | null;
 };
 
 function CatchRow({ item, urlFromPhotoPath }: { item: CatchItem; urlFromPhotoPath: (p?: string | null) => Promise<string | null> }) {
@@ -474,9 +476,14 @@ function CatchRow({ item, urlFromPhotoPath }: { item: CatchItem; urlFromPhotoPat
           {item.weight_kg ? ` · ${item.weight_kg} kg` : ''}
           {item.length_cm ? ` · ${item.length_cm} cm` : ''}
         </Text>
+        {item.region ? (
+          <Text numberOfLines={1} style={{ marginTop: 4, color: '#374151' }}>
+            Lieu : {item.region}
+          </Text>
+        ) : null}
         {item.notes ? (
-          <Text numberOfLines={2} style={{ marginTop: 4 }}>
-            {item.notes}
+          <Text numberOfLines={2} style={{ marginTop: 4, color: '#374151' }}>
+            Leurre : {item.notes}
           </Text>
         ) : null}
       </View>
