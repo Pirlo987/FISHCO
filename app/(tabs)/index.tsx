@@ -29,6 +29,16 @@ type WeatherSnapshot = {
   visibilityKm: number | null;
 };
 
+type ProfileRow = {
+  first_name: string | null;
+  last_name: string | null;
+  username: string | null;
+  avatar_url: string | null;
+  avatar_path: string | null;
+  photo_url: string | null;
+  photo_path: string | null;
+};
+
 const friendsHighlight = {
   title: 'Fishing Group',
   image:
@@ -63,6 +73,21 @@ const urlFromCatchPhoto = (path?: string | null) => {
   return data?.publicUrl ?? null;
 };
 
+const avatarUrlFromProfile = (profile: ProfileRow | null) => {
+  if (!profile) return null;
+  if (profile.avatar_url) return profile.avatar_url;
+  if (profile.photo_url) return profile.photo_url;
+  if (profile.avatar_path) {
+    const { data } = supabase.storage.from('avatars').getPublicUrl(profile.avatar_path);
+    if (data?.publicUrl) return data.publicUrl;
+  }
+  if (profile.photo_path) {
+    const { data } = supabase.storage.from('avatars').getPublicUrl(profile.photo_path);
+    if (data?.publicUrl) return data.publicUrl;
+  }
+  return null;
+};
+
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const { session } = useAuth();
@@ -71,6 +96,8 @@ export default function HomeScreen() {
   const [weather, setWeather] = React.useState<WeatherSnapshot | null>(null);
   const [loadingWeather, setLoadingWeather] = React.useState(false);
   const [weatherError, setWeatherError] = React.useState<string | null>(null);
+  const [profile, setProfile] = React.useState<ProfileRow | null>(null);
+  const [profileAvatarUrl, setProfileAvatarUrl] = React.useState<string | null>(null);
 
   const degreeSymbol = String.fromCharCode(176);
   const formatTemperature = React.useCallback(
@@ -190,22 +217,89 @@ export default function HomeScreen() {
     };
   }, [formatTemperature]);
 
+  React.useEffect(() => {
+    let cancelled = false;
+
+    const loadProfile = async () => {
+      if (!session?.user?.id) {
+        if (!cancelled) setProfileAvatarUrl(null);
+        if (!cancelled) setProfile(null);
+        return;
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('first_name,last_name,username,avatar_url,avatar_path,photo_url,photo_path')
+          .eq('id', session.user.id)
+          .maybeSingle();
+
+        if (error) throw error;
+
+        const profileRow = (data as ProfileRow | null) ?? null;
+        const resolved = avatarUrlFromProfile(profileRow);
+        if (!cancelled) {
+          setProfile(profileRow);
+          setProfileAvatarUrl(resolved);
+        }
+      } catch (error) {
+        console.warn('HomeScreen: unable to load profile avatar', error);
+        if (!cancelled) {
+          setProfile(null);
+          setProfileAvatarUrl(null);
+        }
+      }
+    };
+
+    loadProfile();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.user?.id]);
+
+  const greetingName = React.useMemo(() => {
+    if (profile?.first_name) return profile.first_name;
+    if (profile?.username) return profile.username;
+    const emailName = session?.user?.email ? session.user.email.split('@')[0] : null;
+    return emailName ?? 'there';
+  }, [profile?.first_name, profile?.username, session?.user?.email]);
+
+  const profileInitials = React.useMemo(() => {
+    const syllables = [profile?.first_name, profile?.last_name]
+      .map((part) => (part ? part.trim().charAt(0).toUpperCase() : ''))
+      .filter(Boolean)
+      .join('');
+    if (syllables) return syllables.slice(0, 2);
+    if (profile?.username) return profile.username.charAt(0).toUpperCase();
+    if (session?.user?.email) return session.user.email.charAt(0).toUpperCase();
+    return '?';
+  }, [profile?.first_name, profile?.last_name, profile?.username, session?.user?.email]);
+
   return (
     <ThemedView style={styles.root}>
       <ScrollView
-        contentContainerStyle={[styles.content, { paddingTop: insets.top + 16 }]}
+        contentContainerStyle={[
+          styles.content,
+          { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 48 },
+        ]}
         showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <View style={styles.profileBlock}>
-            <Image
-              source={{
-                uri: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=200&q=80',
-              }}
-              style={styles.avatar}
-              contentFit="cover"
-            />
+            {profileAvatarUrl ? (
+              <Image source={{ uri: profileAvatarUrl }} style={styles.avatar} contentFit="cover" />
+            ) : (
+              <View style={[styles.avatar, styles.avatarPlaceholder]}>
+                <ThemedText
+                  style={styles.avatarInitials}
+                  lightColor="#1F1F1F"
+                  darkColor="#F2F4F7">
+                  {profileInitials}
+                </ThemedText>
+              </View>
+            )}
             <View>
-              <ThemedText style={styles.greeting}>Hello, Brieuc</ThemedText>
+              <ThemedText style={styles.greeting}>Hello, {greetingName}</ThemedText>
               <ThemedText style={styles.profileLevel} lightColor="#8E8E93" darkColor="#B0B0B5">
                 Novice
               </ThemedText>
@@ -217,7 +311,6 @@ export default function HomeScreen() {
         </View>
 
         <View>
-          <ThemedText style={styles.sectionTitle}>See Your Friends</ThemedText>
           <View style={styles.highlightCard}>
             <Image
               source={{ uri: friendsHighlight.image }}
@@ -378,6 +471,15 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
+  },
+  avatarPlaceholder: {
+    backgroundColor: '#E5E7EB',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarInitials: {
+    fontSize: 18,
+    fontWeight: '600',
   },
   greeting: {
     fontSize: 22,

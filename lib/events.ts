@@ -1,7 +1,16 @@
 type Listener<T> = (payload: T) => void;
 
 type EventMap = {
-  'catch:added': { species: string; photoPath?: string };
+  'catch:added': {
+    species: string;
+    photoPath?: string;
+    normalized?: string;
+    catchId?: string;
+    firstDiscovery?: boolean;
+    target?:
+      | { type: 'species'; slug: string; name?: string }
+      | { type: 'catch'; id: string };
+  };
 };
 
 class Emitter {

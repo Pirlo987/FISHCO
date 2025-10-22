@@ -138,14 +138,15 @@ export default function CatchDetailScreen() {
 
         {item.notes ? (
           <View style={styles.section}> 
-            <Text style={styles.sectionLabel}>Notes</Text>
+            <Text style={styles.sectionLabel}>Leurre</Text>
             <Text style={styles.sectionText}>{item.notes}</Text>
           </View>
         ) : null}
 
         {item.region ? (
           <View style={styles.section}> 
-            <Text style={styles.sectionLabel}>Zone</Text>
+            <Text style={styles.sectionLabel}>Lieu</Text>
+            <Text style={styles.sectionText}>{item.region}</Text>
             <WorldMiniMap tags={[item.region]} height={140} />
           </View>
         ) : null}
