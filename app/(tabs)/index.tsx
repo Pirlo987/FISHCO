@@ -1,5 +1,6 @@
 import React from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -41,8 +42,7 @@ type ProfileRow = {
 
 const friendsHighlight = {
   title: 'Fishing Group',
-  image:
-    'https://images.unsplash.com/photo-1490100667990-4fced8021649?auto=format&fit=crop&w=800&q=80',
+  image: require('@/assets/images/fond-ecran-accueil.jpg'),
   avatars: [
     'https://images.unsplash.com/photo-1525130413817-d45c1d127c42?auto=format&fit=crop&w=120&q=60',
     'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?auto=format&fit=crop&w=120&q=60',
@@ -89,6 +89,7 @@ const avatarUrlFromProfile = (profile: ProfileRow | null) => {
 };
 
 export default function HomeScreen() {
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const { session } = useAuth();
   const [recentCatches, setRecentCatches] = React.useState<CatchSummary[]>([]);
@@ -276,6 +277,10 @@ export default function HomeScreen() {
     return '?';
   }, [profile?.first_name, profile?.last_name, profile?.username, session?.user?.email]);
 
+  const handleProfilePress = React.useCallback(() => {
+    router.push('/profile');
+  }, [router]);
+
   return (
     <ThemedView style={styles.root}>
       <ScrollView
@@ -286,18 +291,26 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <View style={styles.profileBlock}>
-            {profileAvatarUrl ? (
-              <Image source={{ uri: profileAvatarUrl }} style={styles.avatar} contentFit="cover" />
-            ) : (
-              <View style={[styles.avatar, styles.avatarPlaceholder]}>
-                <ThemedText
-                  style={styles.avatarInitials}
-                  lightColor="#1F1F1F"
-                  darkColor="#F2F4F7">
-                  {profileInitials}
-                </ThemedText>
-              </View>
-            )}
+            <Pressable
+              onPress={handleProfilePress}
+              hitSlop={12}
+              accessibilityRole="button"
+              accessibilityLabel="Ouvrir votre profil"
+              accessibilityHint="Affiche les informations de votre compte"
+              style={({ pressed }) => [{ opacity: pressed ? 0.65 : 1 }]}>
+              {profileAvatarUrl ? (
+                <Image source={{ uri: profileAvatarUrl }} style={styles.avatar} contentFit="cover" />
+              ) : (
+                <View style={[styles.avatar, styles.avatarPlaceholder]}>
+                  <ThemedText
+                    style={styles.avatarInitials}
+                    lightColor="#1F1F1F"
+                    darkColor="#F2F4F7">
+                    {profileInitials}
+                  </ThemedText>
+                </View>
+              )}
+            </Pressable>
             <View>
               <ThemedText style={styles.greeting}>Hello, {greetingName}</ThemedText>
               <ThemedText style={styles.profileLevel} lightColor="#8E8E93" darkColor="#B0B0B5">
@@ -312,11 +325,11 @@ export default function HomeScreen() {
 
         <View>
           <View style={styles.highlightCard}>
-            <Image
-              source={{ uri: friendsHighlight.image }}
-              style={styles.highlightImage}
-              contentFit="cover"
-            />
+              <Image
+                source={friendsHighlight.image}
+                style={styles.highlightImage}
+                contentFit="cover"
+              />
             <View style={styles.highlightOverlay}>
               <ThemedText style={styles.highlightTitle} lightColor="#FFFFFF" darkColor="#FFFFFF">
                 {friendsHighlight.title}

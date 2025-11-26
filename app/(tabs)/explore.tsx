@@ -173,10 +173,18 @@ export default function ExploreScreen() {
           const mapped: Species[] = (data as any[])
             .map((r) => {
               const name =
-                r.name ?? r.nom ?? r['Nom commun'] ?? r['nom commun'] ?? r.french_name ?? r.label ?? r.title ?? '';
+                r.name ??
+                r.french_name ??
+                r.english_name ??
+                r['Nom commun'] ??
+                r['nom commun'] ??
+                r.nom ??
+                r.label ??
+                r.title ??
+                '';
               const image = toPublicUrl(
-                r.url ?? r.image_url ?? r.image ?? r.photo_url ?? r.image_path ?? r.url_path ?? r.path ?? null,
-                r.url_bucket ?? r.image_bucket ?? r.photo_bucket ?? r.bucket ?? null
+                r.image_url ?? r.url ?? r.image ?? r.photo_url ?? r.image_path ?? r.url_path ?? r.path ?? null,
+                r.image_bucket ?? r.url_bucket ?? r.photo_bucket ?? r.bucket ?? null
               );
               return { name, image } as Species;
             })

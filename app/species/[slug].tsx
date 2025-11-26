@@ -17,23 +17,58 @@ import WorldMiniMap from '@/components/WorldMiniMap';
 import { parseRegionToTags } from '@/constants/regionTags';
 
 type SpeciesRecord = Record<string, any> & {
-  // Names
+  // Current columns
   name?: string;
-  nom?: string;
+  latin_name?: string;
+  english_name?: string;
   french_name?: string;
+  fish_type?: string;
+  water_type?: string;
+  opening_period?: string;
+  average_weight_kg?: number | string | null;
+  max_weight_kg?: number | string | null;
+  average_lifespan_years?: number | string | null;
+  conservation_status?: string;
+  diet?: string;
+  region_stock?: string;
+  average_size_cm?: number | string | null;
+  maturity_size_cm?: number | string | null;
+  optimal_season?: string;
+  fishing_methods?: string;
+  baits?: string;
+  legal_min_size_cm?: number | string | null;
+  image_url?: string;
+  // Legacy/alternate columns kept for backward compatibility with older dumps
+  nom?: string;
   label?: string;
   title?: string;
   'Nom commun'?: string;
   'English common name'?: string;
   'Nom scientifique'?: string;
+  'Nom français'?: string;
+  ' Type de poisson'?: string;
+  'Type de poisson'?: string;
+  'Type de point d\'eau'?: string;
+  'Type de point d’eau'?: string;
+  'Période d\'ouverture (indicative)'?: string;
+  'Poids moyen (kg)'?: number | string | null;
+  'Poids max (kg)'?: number | string | null;
+  'Longévité moyenne (années)'?: number | string | null;
+  'Statut de conservation (UICN)'?: string;
+  'Régime alimentaire détaillé'?: string;
   ' Region / Stock'?: string; // Some sources include a leading space
   'Region / Stock'?: string;
+  'Région / Stock'?: string;
+  'Taille moyenne (cm)'?: number | string | null;
+  'Taille maturite 50% (cm)'?: number | string | null;
   'Saison optimale'?: string;
   'methodes de peche'?: string;
+  'Méthodes de pêche'?: string;
   Appats?: string;
+  'Appâts'?: string;
+  'Taille minimale legale (cm)'?: number | string | null;
   // Image
   url?: string;
-  image_url?: string;
   image?: string;
   photo_url?: string;
   image_path?: string;
@@ -130,7 +165,14 @@ export default function SpeciesDetailScreen() {
           // Find the closest match by normalized name with flexible keys
           const want = normalizeName(initialName || slug);
           const pickName = (r: any) =>
-            r?.['Nom commun'] || r?.name || r?.nom || r?.french_name || r?.label || r?.title || '';
+            r?.name ||
+            r?.french_name ||
+            r?.english_name ||
+            r?.['Nom commun'] ||
+            r?.nom ||
+            r?.label ||
+            r?.title ||
+            '';
           best = data.find((r: any) => normalizeName(pickName(r)) === want);
           best = best || (data[0] as SpeciesRecord);
         }
@@ -148,8 +190,8 @@ export default function SpeciesDetailScreen() {
               }
               return undefined;
             };
-            const raw = pick('url', 'image_url', 'image', 'photo_url', 'image_path', 'url_path', 'path');
-            const bucket = pick('url_bucket', 'image_bucket', 'photo_bucket', 'bucket');
+            const raw = pick('image_url', 'url', 'image', 'photo_url', 'image_path', 'url_path', 'path');
+            const bucket = pick('image_bucket', 'url_bucket', 'photo_bucket', 'bucket');
             img = toPublicUrl(raw, bucket);
           }
           setImageUrl(img);
@@ -251,23 +293,23 @@ export default function SpeciesDetailScreen() {
   }
 
   const displayName =
-    (getField('Nom commun') as string | undefined) ||
-    (getField('name', 'nom', 'french_name', 'label', 'title') as string | undefined) ||
+    (getField('name', 'french_name', 'english_name', 'Nom commun', 'nom', 'label', 'title') as
+      string | undefined) ||
     initialName ||
     slug;
 
-  const sciName = getField('Nom scientifique');
-  const enName = getField('English common name');
-  const region = getField('Region / Stock', ' Region / Stock', 'Région / Stock');
+  const sciName = getField('latin_name', 'Nom scientifique');
+  const enName = getField('english_name', 'English common name');
+  const region = getField('region_stock', 'Region / Stock', ' Region / Stock', 'Région / Stock');
   const regionTags = React.useMemo(() => {
     const fromRegion = parseRegionToTags(region ? String(region) : '');
     if (fromRegion.length) return fromRegion;
     // Fallback: try to infer from display name (e.g., "Saumon atlantique")
     return parseRegionToTags(displayName || '');
   }, [region, displayName]);
-  const season = getField('Saison optimale');
-  const methods = getField('methodes de peche', 'Méthodes de pêche');
-  const baits = getField('Appats', 'Appâts');
+  const season = getField('optimal_season', 'Saison optimale');
+  const methods = getField('fishing_methods', 'methodes de peche', 'Méthodes de pêche');
+  const baits = getField('baits', 'Appats', 'Appâts');
 
   return (
     <>
