@@ -1,5 +1,6 @@
 ﻿import React from 'react';
 import {
+  ActivityIndicator,
   Alert,
   Keyboard,
   KeyboardAvoidingView,
@@ -29,6 +30,9 @@ import { decode } from 'base64-arraybuffer';
 import { ThemedSafeArea } from '@/components/SafeArea';
 import { FISH_SPECIES, normalizeName, type Species } from '@/constants/species';
 
+const SPECIES_AI_FUNCTION =
+  process.env.EXPO_PUBLIC_SPECIES_AI_FUNCTION ?? 'detect-species';
+
 type FormErrors = {
   species?: string;
   weight?: string;
@@ -41,6 +45,19 @@ type PreparedImage = {
   arrayBuffer: ArrayBuffer;
   contentType: string;
   ext: string;
+  base64: string;
+};
+
+type AISuggestion = {
+  species: string;
+  confidence: number;
+  matched?: boolean;
+  source?: 'database' | 'ai';
+};
+
+type DetectSpeciesResponse = {
+  suggestions?: AISuggestion[];
+  error?: string;
 };
 
 export default function AddCatchScreen() {
@@ -59,12 +76,19 @@ export default function AddCatchScreen() {
   const [speciesOptions, setSpeciesOptions] = React.useState<Species[]>(FISH_SPECIES);
   const [errors, setErrors] = React.useState<FormErrors>({});
   const [speciesFocused, setSpeciesFocused] = React.useState(false);
+  const [speciesTouched, setSpeciesTouched] = React.useState(false);
+  const [aiLoading, setAiLoading] = React.useState(false);
+  const [aiError, setAiError] = React.useState<string | null>(null);
+  const [aiSuggestions, setAiSuggestions] = React.useState<AISuggestion[]>([]);
 
   const scrollRef = React.useRef<ScrollView | null>(null);
   const speciesFieldOffset = React.useRef(0);
   const isMountedRef = React.useRef(true);
   const hasLoadedSpeciesRef = React.useRef(false);
   const speciesFetchIdRef = React.useRef(0);
+  const aiRequestIdRef = React.useRef(0);
+  const speciesValueRef = React.useRef(species);
+  const speciesTouchedRef = React.useRef(speciesTouched);
 
   const onSpeciesFieldLayout = React.useCallback((event: LayoutChangeEvent) => {
     speciesFieldOffset.current = event.nativeEvent.layout.y;
@@ -94,20 +118,22 @@ export default function AddCatchScreen() {
           .map((r) => {
             const name =
               r.name ??
-              r.nom ??
+              r.french_name ??
+              r.english_name ??
               r['Nom commun'] ??
               r['nom commun'] ??
-              r.french_name ??
+              r.nom ??
               r.label ??
               r.title ??
               '';
             const imageUrl =
               r.image_url ??
+              r.url ??
               r.image ??
               r.photo_url ??
-              r.url ??
               r.image_path ??
               r.url_path ??
+              r.path ??
               undefined;
             return { name, image: imageUrl } as Species;
           })
@@ -149,6 +175,13 @@ export default function AddCatchScreen() {
     []
   );
 
+  const clearAiState = React.useCallback(() => {
+    aiRequestIdRef.current += 1;
+    setAiSuggestions([]);
+    setAiError(null);
+    setAiLoading(false);
+  }, []);
+
   const resetForm = React.useCallback(() => {
     setStep(1);
     setSpecies('');
@@ -159,7 +192,9 @@ export default function AddCatchScreen() {
     setImage(null);
     setErrors({});
     setSpeciesFocused(false);
-  }, []);
+    setSpeciesTouched(false);
+    clearAiState();
+  }, [clearAiState]);
 
   const ensureLibraryPermission = React.useCallback(async () => {
     const current = await ImagePicker.getMediaLibraryPermissionsAsync();
@@ -209,6 +244,13 @@ export default function AddCatchScreen() {
     return speciesOptions.filter((s) => normalizeName(s.name).includes(q)).slice(0, 8);
   }, [species, speciesOptions]);
 
+  const shouldShowSpeciesDropdown = React.useMemo(() => {
+    const hasOptions = speciesSuggestions.length > 0;
+    const hasText = !!species.trim();
+    const hasAiProposals = aiSuggestions.length > 0;
+    return hasOptions && (speciesFocused || hasText || hasAiProposals);
+  }, [aiSuggestions.length, species, speciesFocused, speciesSuggestions.length]);
+
   React.useEffect(() => {
     if (errors.species && species.trim()) {
       setErrors((prev) => ({ ...prev, species: undefined }));
@@ -226,6 +268,14 @@ export default function AddCatchScreen() {
       setErrors((prev) => ({ ...prev, location: undefined }));
     }
   }, [location, errors.location]);
+
+  React.useEffect(() => {
+    speciesValueRef.current = species;
+  }, [species]);
+
+  React.useEffect(() => {
+    speciesTouchedRef.current = speciesTouched;
+  }, [speciesTouched]);
 
   const isPositiveNumber = React.useCallback((value: string) => {
     if (!value || !value.trim()) return false;
@@ -268,15 +318,14 @@ export default function AddCatchScreen() {
 
   const handleNextStep = React.useCallback(() => {
     if (step === 1) {
-      const speciesOk = validateSpecies();
-      const imageOk = validateImage();
-      if (speciesOk && imageOk) setStep(2);
+      if (validateImage()) setStep(2);
       return;
     }
     if (step === 2) {
-      if (validateMeasures()) setStep(3);
+      const speciesOk = validateSpecies();
+      if (speciesOk) setStep(3);
     }
-  }, [step, validateSpecies, validateImage, validateMeasures]);
+  }, [step, validateImage, validateSpecies]);
 
   const handlePreviousStep = React.useCallback(() => {
     if (step === 2) setStep(1);
@@ -304,10 +353,79 @@ export default function AddCatchScreen() {
         arrayBuffer,
         contentType: 'image/jpeg',
         ext: 'jpg',
+        base64,
       };
     },
     [normalizeFileUri],
   );
+
+    const classifyCatchPhoto = React.useCallback(
+    async (asset: ImagePicker.ImagePickerAsset) => {
+      if (!asset?.uri) return;
+      const requestId = ++aiRequestIdRef.current;
+      setAiLoading(true);
+      setAiError(null);
+      setAiSuggestions([]);
+      try {
+        const prepared = await prepareImageForUpload(asset);
+        if (aiRequestIdRef.current !== requestId) return;
+        const imageUrl = `data:${prepared.contentType};base64,${prepared.base64}`;
+        const { data, error } = await supabase.functions.invoke<DetectSpeciesResponse>(
+          SPECIES_AI_FUNCTION,
+          {
+            body: { image: imageUrl },
+          },
+        );
+        if (aiRequestIdRef.current !== requestId) return;
+        if (error) {
+          throw new Error(error.message ?? 'Analyse indisponible');
+        }
+        if (data?.error) {
+          throw new Error(data.error);
+        }
+        const suggestions = Array.isArray(data?.suggestions) ? data.suggestions : [];
+        if (!suggestions.length) {
+          throw new Error('Aucune proposition reçue.');
+        }
+        setAiSuggestions(suggestions.slice(0, 3));
+        if (!speciesTouchedRef.current && !speciesValueRef.current.trim() && suggestions[0]) {
+          setSpecies(suggestions[0].species);
+        }
+      } catch (error) {
+        if (aiRequestIdRef.current !== requestId) return;
+        const message =
+          error instanceof Error ? error.message : 'Analyse impossible. Réessaie plus tard.';
+        setAiError(message);
+      } finally {
+        if (aiRequestIdRef.current === requestId) {
+          setAiLoading(false);
+        }
+      }
+    },
+    [prepareImageForUpload],
+  );
+
+  React.useEffect(() => {
+    if (!image) {
+      clearAiState();
+      return;
+    }
+    clearAiState();
+    setSpecies('');
+    setSpeciesTouched(false);
+    setErrors((prev) => ({ ...prev, species: undefined }));
+    classifyCatchPhoto(image);
+  }, [image, classifyCatchPhoto, clearAiState]);
+
+  const handleAiSuggestionPress = React.useCallback((value: string) => {
+    if (!value) return;
+    setSpecies(value);
+    setSpeciesTouched(true);
+    setErrors((prev) => ({ ...prev, species: undefined }));
+    try {
+      Keyboard.dismiss();
+    } catch {}
+  }, []);
 
   const uploadToSupabase = React.useCallback(
     async (
@@ -458,53 +576,12 @@ export default function AddCatchScreen() {
     <>
       <View style={styles.heroHeader}>
         <View style={{ flex: 1 }}>
-          <Text style={styles.heroTitle}>Nom de l'espÃ¨ce</Text>
-          <Text style={styles.heroSubtitle}>Choisis l'intitulÃ© exact, tel qu'indiquÃ© sur la fiche.</Text>
+          <Text style={styles.heroTitle}>Photo de ta prise</Text>
+          <Text style={styles.heroSubtitle}>Ajoute une photo avant de donner les d?tails.</Text>
         </View>
         <View style={styles.heroIcon}>
-          <Ionicons name="fish-outline" size={24} color="#1E40AF" />
+          <Ionicons name="camera-outline" size={24} color="#1E40AF" />
         </View>
-      </View>
-      <View onLayout={onSpeciesFieldLayout}>
-        <Text style={styles.fieldLabel}>Espï¿½ce</Text>
-        {!!errors.species && <Text style={styles.errorText}>{errors.species}</Text>}
-        <TextInput
-          placeholder="Ex. Brochet, Sandre, Bar..."
-          placeholderTextColor="#94A3B8"
-          value={species}
-          onChangeText={(value) => {
-            setSpecies(value);
-            if (errors.species) setErrors((prev) => ({ ...prev, species: undefined }));
-          }}
-          onFocus={handleSpeciesFocus}
-          onBlur={handleSpeciesBlur}
-          style={[
-            styles.largeInput,
-            errors.species && styles.inputError,
-          ]}
-          autoCapitalize="words"
-          autoCorrect={false}
-        />
-        {speciesFocused && !!speciesSuggestions.length && !!species.trim() ? (
-          <View style={styles.suggestions}>
-            {speciesSuggestions.map((option, index) => (
-              <Pressable
-                key={`${normalizeName(option.name)}-${index}`}
-                onPress={() => {
-                  setSpecies(option.name);
-                  setSpeciesFocused(false);
-                  setErrors((prev) => ({ ...prev, species: undefined }));
-                  try {
-                    Keyboard.dismiss();
-                  } catch {}
-                }}
-                style={styles.suggestionChip}
-              >
-                <Text style={styles.suggestionText}>{option.name}</Text>
-              </Pressable>
-            ))}
-          </View>
-        ) : null}
       </View>
       {image?.uri ? (
         <>
@@ -526,54 +603,97 @@ export default function AddCatchScreen() {
         </View>
       )}
       {!!errors.image && <Text style={styles.errorText}>{errors.image}</Text>}
+      {image?.uri && aiLoading ? (
+        <View style={styles.aiBanner}>
+          <ActivityIndicator size="small" color="#1E3A8A" />
+          <Text style={styles.aiBannerText}>Analyse de la photo en cours...</Text>
+        </View>
+      ) : null}
+      {image?.uri && aiError ? <Text style={styles.aiBannerError}>{aiError}</Text> : null}
     </>
   );
 
-  const Step2 = (
+    const Step2 = (
     <>
-      <Text style={styles.stepTitle}>Mesures et leurre</Text>
-      <Text style={styles.stepSubtitle}>
-        Entre les dimensions de ta prise et le leurre utilisÃ©.
-      </Text>
+      <Text style={styles.stepTitle}>Espèce</Text>
+      <Text style={styles.stepSubtitle}>Choisis l'espèce correspondant à la photo.</Text>
+      {aiLoading ? (
+        <View style={[styles.aiBanner, styles.aiBannerInline]}>
+          <ActivityIndicator size="small" color="#1E3A8A" />
+          <Text style={styles.aiBannerText}>Analyse de la photo en cours...</Text>
+        </View>
+      ) : null}
+      {!!aiError && !aiLoading ? <Text style={styles.aiBannerError}>{aiError}</Text> : null}
+      <View onLayout={onSpeciesFieldLayout} style={{ marginTop: 16 }}>
+        <Text style={styles.fieldLabel}>Espèce</Text>
+        {!!errors.species && <Text style={styles.errorText}>{errors.species}</Text>}
         <TextInput
-        placeholder="Poids (kg)*"
-        placeholderTextColor="#9CA3AF"
-        value={weight}
-        onChangeText={(value) => {
-          setWeight(value);
-          if (errors.weight) setErrors((prev) => ({ ...prev, weight: undefined }));
-        }}
-        style={[styles.input, errors.weight && styles.inputError]}
-        keyboardType="decimal-pad"
-      />
-      {!!errors.weight && <Text style={styles.errorText}>{errors.weight}</Text>}
-        <TextInput
-        placeholder="Taille (cm)*"
-        placeholderTextColor="#9CA3AF"
-        value={length}
-        onChangeText={(value) => {
-          setLength(value);
-          if (errors.length) setErrors((prev) => ({ ...prev, length: undefined }));
-        }}
-        style={[styles.input, errors.length && styles.inputError]}
-        keyboardType="decimal-pad"
-      />
-      {!!errors.length && <Text style={styles.errorText}>{errors.length}</Text>}
-        <TextInput
-        placeholder="Leurre utilisÃ© (optionnel)"
-        placeholderTextColor="#9CA3AF"
-        value={lure}
-        onChangeText={setLure}
-        style={styles.input}
-      />
+          placeholder="Ex. Brochet, Sandre, Bar..."
+          placeholderTextColor="#94A3B8"
+          value={species}
+          onChangeText={(value) => {
+            setSpecies(value);
+            setSpeciesTouched(true);
+            if (errors.species) setErrors((prev) => ({ ...prev, species: undefined }));
+          }}
+          onFocus={handleSpeciesFocus}
+          onBlur={handleSpeciesBlur}
+          style={[
+            styles.largeInput,
+            errors.species && styles.inputError,
+          ]}
+          autoCapitalize="words"
+          autoCorrect={false}
+        />
+        {shouldShowSpeciesDropdown ? (
+          <View style={styles.suggestions}>
+            {speciesSuggestions.map((option, index) => (
+              <Pressable
+                key={normalizeName(option.name) + '-' + index}
+                onPress={() => {
+                  setSpecies(option.name);
+                  setSpeciesTouched(true);
+                  setSpeciesFocused(false);
+                  setErrors((prev) => ({ ...prev, species: undefined }));
+                  try {
+                    Keyboard.dismiss();
+                  } catch {}
+                }}
+                style={styles.suggestionChip}
+              >
+                <Text style={styles.suggestionText}>{option.name}</Text>
+              </Pressable>
+            ))}
+          </View>
+        ) : null}
+      </View>
+      {!!aiSuggestions.length && !aiLoading ? (
+        <View style={styles.aiSuggestionsBox}>
+          <Text style={styles.aiSuggestionsTitle}>Suggestions IA</Text>
+          {aiSuggestions.map((suggestion, index) => (
+            <Pressable
+              key={suggestion.species + '-' + index}
+              onPress={() => handleAiSuggestionPress(suggestion.species)}
+              style={styles.aiSuggestionChip}
+            >
+              <Text style={styles.aiSuggestionSpecies}>{suggestion.species}</Text>
+              <Text style={styles.aiSuggestionConfidence}>{suggestion.confidence}%</Text>
+            </Pressable>
+          ))}
+          <Text style={styles.aiSuggestionsHint}>
+            Touchez une proposition pour remplir automatiquement.
+          </Text>
+        </View>
+      ) : null}
     </>
   );
-
   const Step3 = (
     <>
-      <Text style={styles.stepTitle}>Lieu</Text>
-      <Text style={styles.stepSubtitle}>Indique la localisation de ta prise.</Text>
-        <TextInput
+      <Text style={styles.stepTitle}>Lieu et mesures</Text>
+      <Text style={styles.stepSubtitle}>
+        Indique la localisation de ta prise puis ses mesures et le leurre utilisé.
+      </Text>
+      <TextInput
         placeholder="Lieu de la prise (obligatoire)"
         placeholderTextColor="#9CA3AF"
         value={location}
@@ -585,6 +705,39 @@ export default function AddCatchScreen() {
         autoCapitalize="sentences"
       />
       {!!errors.location && <Text style={styles.errorText}>{errors.location}</Text>}
+      <View style={{ marginTop: 16 }}>
+        <TextInput
+          placeholder="Poids (kg)*"
+          placeholderTextColor="#9CA3AF"
+          value={weight}
+          onChangeText={(value) => {
+            setWeight(value);
+            if (errors.weight) setErrors((prev) => ({ ...prev, weight: undefined }));
+          }}
+          style={[styles.input, errors.weight && styles.inputError]}
+          keyboardType="decimal-pad"
+        />
+        {!!errors.weight && <Text style={styles.errorText}>{errors.weight}</Text>}
+        <TextInput
+          placeholder="Taille (cm)*"
+          placeholderTextColor="#9CA3AF"
+          value={length}
+          onChangeText={(value) => {
+            setLength(value);
+            if (errors.length) setErrors((prev) => ({ ...prev, length: undefined }));
+          }}
+          style={[styles.input, errors.length && styles.inputError]}
+          keyboardType="decimal-pad"
+        />
+        {!!errors.length && <Text style={styles.errorText}>{errors.length}</Text>}
+        <TextInput
+          placeholder="Leurre utilisé (optionnel)"
+          placeholderTextColor="#9CA3AF"
+          value={lure}
+          onChangeText={setLure}
+          style={styles.input}
+        />
+      </View>
     </>
   );
 
@@ -779,6 +932,43 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   secondaryButtonText: { color: '#333', fontWeight: '600' },
+  aiBanner: {
+    marginTop: 16,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: '#EFF6FF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  aiBannerInline: {
+    marginTop: 12,
+  },
+  aiBannerText: { color: '#0F172A', flex: 1 },
+  aiBannerError: { marginTop: 12, color: '#B91C1C' },
+  aiSuggestionsBox: {
+    marginTop: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#e5e7eb',
+    borderRadius: 14,
+    padding: 12,
+    backgroundColor: '#FFFFFF',
+    gap: 8,
+  },
+  aiSuggestionsTitle: { fontWeight: '600', color: '#0F172A' },
+  aiSuggestionChip: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: '#F1F5F9',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  aiSuggestionSpecies: { fontWeight: '600', color: '#0F172A', flex: 1 },
+  aiSuggestionConfidence: { color: '#1E3A8A', fontWeight: '600' },
+  aiSuggestionsHint: { fontSize: 12, color: '#475569' },
   photoRow: { flexDirection: 'row', gap: 12 },
   hero: {
     height: 220,
@@ -806,6 +996,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 });
+
+
+
+
+
+
+
 
 
 

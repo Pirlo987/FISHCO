@@ -48,3 +48,13 @@ Join our community of developers creating universal apps.
 
 - [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
 - [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+
+## Reconnaissance d'espèce (OpenAI via Supabase)
+
+La détection automatique de l'espèce exploite une fonction Edge Supabase (`detect-species`) qui appelle OpenAI côté serveur pour éviter toute fuite de clé dans l'app mobile.
+
+1. Déployez la fonction depuis `supabase/functions/detect-species`. Avec le CLI Supabase : `supabase functions deploy detect-species --project-ref <votre-ref>`.
+2. Définissez les variables d'environnement sur le projet Supabase (Dashboard → Project Settings → Functions):
+   - `OPENAI_API_KEY` (obligatoire)
+   - `OPENAI_MODEL` (optionnel, défaut `gpt-4o-mini`)
+3. Dans l'app Expo, assurez-vous que `.env` contient `EXPO_PUBLIC_SPECIES_AI_FUNCTION=detect-species` (ou un autre nom si vous l'avez modifié) puis relancez Expo pour recharger l'env.
