@@ -33,6 +33,8 @@ import { FISH_SPECIES, normalizeName, type Species } from '@/constants/species';
 const SPECIES_AI_FUNCTION =
   process.env.EXPO_PUBLIC_SPECIES_AI_FUNCTION ?? 'detect-species';
 
+type Step = 1 | 2 | 3 | 4;
+
 type FormErrors = {
   species?: string;
   weight?: string;
@@ -65,12 +67,14 @@ export default function AddCatchScreen() {
   const { session } = useAuth();
   const insets = useSafeAreaInsets();
 
-  const [step, setStep] = React.useState<1 | 2 | 3>(1);
+  const [step, setStep] = React.useState<Step>(1);
   const [species, setSpecies] = React.useState('');
   const [weight, setWeight] = React.useState('');
   const [length, setLength] = React.useState('');
   const [lure, setLure] = React.useState('');
   const [location, setLocation] = React.useState('');
+  const [visibility, setVisibility] = React.useState<'public' | 'private'>('public');
+  const [description, setDescription] = React.useState('');
   const [loading, setLoading] = React.useState(false);
   const [image, setImage] = React.useState<ImagePicker.ImagePickerAsset | null>(null);
   const [speciesOptions, setSpeciesOptions] = React.useState<Species[]>(FISH_SPECIES);
@@ -189,6 +193,8 @@ export default function AddCatchScreen() {
     setLength('');
     setLure('');
     setLocation('');
+    setVisibility('public');
+    setDescription('');
     setImage(null);
     setErrors({});
     setSpeciesFocused(false);
@@ -242,6 +248,12 @@ export default function AddCatchScreen() {
     const q = normalizeName(species);
     if (!q) return speciesOptions.slice(0, 8);
     return speciesOptions.filter((s) => normalizeName(s.name).includes(q)).slice(0, 8);
+  }, [species, speciesOptions]);
+
+  const isKnownSpecies = React.useMemo(() => {
+    const normalized = normalizeName(species);
+    if (!normalized) return false;
+    return speciesOptions.some((option) => normalizeName(option.name) === normalized);
   }, [species, speciesOptions]);
 
   const shouldShowSpeciesDropdown = React.useMemo(() => {
@@ -324,12 +336,19 @@ export default function AddCatchScreen() {
     if (step === 2) {
       const speciesOk = validateSpecies();
       if (speciesOk) setStep(3);
+      return;
     }
-  }, [step, validateImage, validateSpecies]);
+    if (step === 3) {
+      const locationOk = validateLocation();
+      const measuresOk = validateMeasures();
+      if (locationOk && measuresOk) setStep(4);
+    }
+  }, [step, validateImage, validateLocation, validateMeasures, validateSpecies]);
 
   const handlePreviousStep = React.useCallback(() => {
     if (step === 2) setStep(1);
     if (step === 3) setStep(2);
+    if (step === 4) setStep(3);
   }, [step]);
 
   const normalizeFileUri = React.useCallback((uri: string) => {
@@ -446,16 +465,7 @@ export default function AddCatchScreen() {
     [],
   );
 
-  const onSave = React.useCallback(async () => {
-    if (!session) {
-      Alert.alert('Non connectÃ©', 'Veuillez vous connecter.');
-      return;
-    }
-    if (!validateAll()) {
-      Alert.alert('Champs requis', 'ComplÃ¨te les champs obligatoires.');
-      return;
-    }
-
+  const persistCatch = React.useCallback(async () => {
     setLoading(true);
 
     let photoPath: string | undefined;
@@ -469,19 +479,19 @@ export default function AddCatchScreen() {
 
     try {
       const prepared = await prepareImageForUpload(image);
-      photoPath = await uploadToSupabase(prepared, session.user.id);
+      photoPath = await uploadToSupabase(prepared, session!.user.id);
     } catch (error: any) {
       console.warn('Image upload failed:', error?.message ?? error);
       const message = String(error?.message ?? error);
       if (/row-level security/i.test(message)) {
         Alert.alert(
           'RLS Supabase',
-          "Upload bloquÃ© par RLS. VÃ©rifie :\nâ€¢ bucket `catch-photos`\nâ€¢ chemin `catches/{auth.uid()}/...`\nâ€¢ policies INSERT/UPDATE/DELETE actives",
+          "Upload bloqué par RLS. Vérifie :\n- bucket catch-photos\n- chemin catches/{auth.uid()}/...\n- policies INSERT/UPDATE/DELETE actives",
         );
       } else {
         Alert.alert(
-          'Photo non importÃ©e',
-          "Impossible d'importer la photo. La prise sera enregistrÃ©e sans image.",
+          'Photo non importée',
+          "Impossible d'importer la photo. La prise sera enregistrée sans image.",
         );
       }
     }
@@ -493,7 +503,7 @@ export default function AddCatchScreen() {
       const { count, error: countError } = await supabase
         .from('catches')
         .select('id', { count: 'exact', head: true })
-        .eq('user_id', session.user.id)
+        .eq('user_id', session!.user.id)
         .ilike('species', trimmedSpecies);
       if (!countError) {
         alreadyDiscovered = (count ?? 0) > 0;
@@ -501,15 +511,42 @@ export default function AddCatchScreen() {
     } catch {}
 
     const payload: Record<string, any> = {
-      user_id: session.user.id,
+      user_id: session!.user.id,
       species: trimmedSpecies,
       notes: lure.trim() || null,
       region: location.trim() || null,
       caught_at: new Date().toISOString(),
+      is_public: visibility === 'public',
+      description: description.trim() || null,
     };
     if (photoPath) payload.photo_path = photoPath;
     if (weight.trim()) payload.weight_kg = parseFloat(weight.replace(',', '.'));
     if (length.trim()) payload.length_cm = parseFloat(length.replace(',', '.'));
+
+    if (!isKnownSpecies) {
+      try {
+        const { error: pendingError } = await supabase.from('pending_species').insert([
+          {
+            name: trimmedSpecies,
+            user_id: session!.user.id,
+            status: 'pending',
+          },
+        ]);
+        if (pendingError) {
+          console.warn('pending_species insert failed', pendingError);
+          Alert.alert(
+            'Sauvegarde espèce à vérifier',
+            pendingError.message ?? 'Ajout dans la liste de vérification impossible.',
+          );
+        }
+      } catch (err: any) {
+        console.warn('pending_species insert failed', err);
+        Alert.alert(
+          'Sauvegarde espèce à vérifier',
+          err?.message ?? 'Ajout dans la liste de vérification impossible.',
+        );
+      }
+    }
 
     const { data: newCatch, error } = await supabase
       .from('catches')
@@ -555,21 +592,49 @@ export default function AddCatchScreen() {
     }, 0);
   }, [
     image,
+    isKnownSpecies,
     length,
     location,
     lure,
     router,
     session,
+    visibility,
+    description,
     species,
     uploadToSupabase,
-    validateAll,
     weight,
     prepareImageForUpload,
     resetForm,
   ]);
 
+  const onSave = React.useCallback(() => {
+    if (!session) {
+      Alert.alert('Non connecté', 'Veuillez vous connecter.');
+      return;
+    }
+    if (!validateAll()) {
+      Alert.alert('Champs requis', 'Complète les champs obligatoires.');
+      return;
+    }
+
+    if (!isKnownSpecies) {
+      Alert.alert(
+        'Espèce en vérification',
+        "Cette espèce n'est pas encore dans Fishbook. Elle sera vérifiée puis ajoutée plus tard.",
+        [
+          { text: 'Annuler', style: 'cancel' },
+          { text: 'Continuer', style: 'default', onPress: () => persistCatch() },
+        ],
+      );
+      return;
+    }
+
+    persistCatch();
+  }, [isKnownSpecies, persistCatch, session, validateAll]
+  );
+
   const primaryLabel =
-    step === 3 ? (loading ? 'Enregistrement...' : 'Enregistrer') : 'Continuer';
+    step === 4 ? (loading ? 'Enregistrement...' : 'Enregistrer') : 'Continuer';
   const showBackButton = step > 1;
 
   const Step1 = (
@@ -685,6 +750,15 @@ export default function AddCatchScreen() {
           </Text>
         </View>
       ) : null}
+      {!!species.trim() && !isKnownSpecies ? (
+        <View style={styles.unknownSpeciesBox}>
+          <Text style={styles.unknownSpeciesTitle}>Espèce non encore référencée</Text>
+          <Text style={styles.unknownSpeciesText}>
+            Nous ne trouvons pas cette espèce dans la base. Elle sera enregistrée dans ta
+            collection et mise en vérification avant d'être ajoutée définitivement.
+          </Text>
+        </View>
+      ) : null}
     </>
   );
   const Step3 = (
@@ -741,6 +815,50 @@ export default function AddCatchScreen() {
     </>
   );
 
+
+  const Step4 = (
+    <>
+      <Text style={styles.stepTitle}>Visibilite et descriptif</Text>
+      <Text style={styles.stepSubtitle}>
+        Choisis si ta prise est publique ou privee et ajoute un descriptif rapide.
+      </Text>
+      <View style={styles.visibilityRow}>
+        <Pressable
+          onPress={() => setVisibility('public')}
+          style={[
+            styles.visibilityCard,
+            visibility === 'public' && styles.visibilityCardActive,
+          ]}
+        >
+          <Text style={styles.visibilityTitle}>Publique</Text>
+          <Text style={styles.visibilityText}>Partage ta prise avec la communaute.</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => setVisibility('private')}
+          style={[
+            styles.visibilityCard,
+            visibility === 'private' && styles.visibilityCardActive,
+          ]}
+        >
+          <Text style={styles.visibilityTitle}>Privee</Text>
+          <Text style={styles.visibilityText}>Seulement visible pour toi dans l'historique.</Text>
+        </Pressable>
+      </View>
+      <View style={{ marginTop: 16 }}>
+        <Text style={styles.fieldLabel}>Descriptif</Text>
+        <TextInput
+          placeholder="Ajoute un petit resume de ta prise (optionnel)"
+          placeholderTextColor="#9CA3AF"
+          value={description}
+          onChangeText={setDescription}
+          style={styles.textarea}
+          multiline
+          numberOfLines={4}
+        />
+      </View>
+    </>
+  );
+
   return (
     <ThemedSafeArea>
       <KeyboardAvoidingView
@@ -758,7 +876,7 @@ export default function AddCatchScreen() {
           >
             <View style={styles.progressBarContainer}>
               <View style={styles.progressBar}>
-                {[1, 2, 3].map((value) => (
+                {[1, 2, 3, 4].map((value) => (
                   <View
                     key={value}
                     style={[
@@ -776,7 +894,7 @@ export default function AddCatchScreen() {
             contentContainerStyle={styles.content}
           >
             <View style={styles.stepContainer}>
-              {step === 1 ? Step1 : step === 2 ? Step2 : Step3}
+              {step === 1 ? Step1 : step === 2 ? Step2 : step === 3 ? Step3 : Step4}
               <View style={styles.contentSpacer} />
             </View>
           </ScrollView>
@@ -798,13 +916,13 @@ export default function AddCatchScreen() {
               </Pressable>
             ) : null}
             <Pressable
-              onPress={step === 3 ? onSave : handleNextStep}
+              onPress={step === 4 ? onSave : handleNextStep}
               style={[
                 styles.primaryButtonWrapper,
                 styles.navButton,
                 !showBackButton && styles.navButtonFull,
               ]}
-              disabled={step === 3 && loading}
+              disabled={step === 4 && loading}
             >
               <LinearGradient
                 colors={['#2563EB', '#1D4ED8']}
@@ -812,7 +930,7 @@ export default function AddCatchScreen() {
                 end={{ x: 1, y: 1 }}
                 style={[
                   styles.primaryButton,
-                  step === 3 && loading && styles.primaryButtonDisabled,
+                  step === 4 && loading && styles.primaryButtonDisabled,
                 ]}
               >
                 <Text style={styles.primaryButtonText}>{primaryLabel}</Text>
@@ -845,7 +963,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    width: 160,
+    width: 200,
   },
   progressSegment: {
     flex: 1,
@@ -969,6 +1087,17 @@ const styles = StyleSheet.create({
   aiSuggestionSpecies: { fontWeight: '600', color: '#0F172A', flex: 1 },
   aiSuggestionConfidence: { color: '#1E3A8A', fontWeight: '600' },
   aiSuggestionsHint: { fontSize: 12, color: '#475569' },
+  unknownSpeciesBox: {
+    marginTop: 16,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: '#FFF7ED',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#FDBA74',
+    gap: 6,
+  },
+  unknownSpeciesTitle: { fontWeight: '700', color: '#9A3412' },
+  unknownSpeciesText: { color: '#9A3412' },
   photoRow: { flexDirection: 'row', gap: 12 },
   hero: {
     height: 220,
@@ -995,7 +1124,38 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  visibilityRow: { flexDirection: 'row', gap: 12, marginTop: 12 },
+  visibilityCard: {
+    flex: 1,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#E5E7EB',
+    padding: 14,
+    backgroundColor: '#F8FAFC',
+    gap: 6,
+  },
+  visibilityCardActive: { borderColor: '#2563EB', backgroundColor: '#EEF2FF' },
+  visibilityTitle: { fontWeight: '700', color: '#0F172A' },
+  visibilityText: { color: '#475569', fontSize: 13 },
+  textarea: {
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#F8FAFC',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    textAlignVertical: 'top',
+    minHeight: 110,
+  },
 });
+
+
+
+
+
+
+
+
 
 
 
