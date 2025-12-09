@@ -75,7 +75,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     }
 
     if (!session && !inAuthGroup && !inOnboarding) {
-      router.replace('/(auth)/login');
+      router.replace('/onboarding');
       return;
     }
 

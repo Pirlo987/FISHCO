@@ -18,8 +18,8 @@ import { ThemedText } from "@/components/ThemedText";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/AuthProvider";
 
-// Profil minimal pour afficher le nom et l'avatar
- type Profile = {
+// Types ---------------------------------------------------------------------
+type Profile = {
   id: string;
   username: string | null;
   first_name: string | null;
@@ -45,12 +45,43 @@ type FeedItem = {
 
 type CommentRow = {
   id: string;
+  catch_id: string;
   content: string;
   created_at: string;
-  catch_id?: string;
   profiles?: Profile | null;
 };
 
+type ActionBarProps = {
+  liked: boolean;
+  onToggleLike: () => void;
+  onToggleComments: () => void;
+};
+
+type CommentSectionProps = {
+  isOpen: boolean;
+  comments: CommentRow[];
+  draft: string;
+  onDraftChange: (text: string) => void;
+  onSubmit: () => void;
+};
+
+type CatchCardProps = {
+  item: FeedItem;
+  likeCount: number;
+  commentCount: number;
+  liked: boolean;
+  photoRatio: number;
+  comments: CommentRow[];
+  commentDraft: string;
+  commentOpen: boolean;
+  onToggleLike: (id: string) => void;
+  onToggleComments: (id: string) => void;
+  onSubmitComment: (id: string) => void;
+  onDraftChange: (id: string, text: string) => void;
+  onPhotoRatio: (id: string, ratio: number) => void;
+};
+
+// Helpers -------------------------------------------------------------------
 const formatDate = (value: string | null | undefined) => {
   if (!value) return "";
   const d = new Date(value);
@@ -85,6 +116,168 @@ const catchPhotoUrl = (path?: string | null) => {
   return data.publicUrl ?? null;
 };
 
+// UI components -------------------------------------------------------------
+const UserAvatar: React.FC<{ profile?: Profile | null; name: string }> = ({ profile, name }) => {
+  const avatar = avatarUrlFromProfile(profile);
+  if (avatar) {
+    return <Image source={{ uri: avatar }} style={styles.avatar} contentFit="cover" />;
+  }
+  return (
+    <View style={[styles.avatar, styles.avatarFallback]}>
+      <Text style={styles.avatarInitial}>{name.slice(0, 1).toUpperCase()}</Text>
+    </View>
+  );
+};
+
+const CatchPhoto: React.FC<{
+  photoUrl: string | null;
+  ratio: number;
+  onRatio: (ratio: number) => void;
+}> = ({ photoUrl, ratio, onRatio }) => (
+  <View style={styles.photoWrapper}>
+    {photoUrl ? (
+      <Image
+        source={{ uri: photoUrl }}
+        style={[styles.photo, { aspectRatio: ratio }]}
+        contentFit="contain"
+        onLoad={(event) => {
+          const w = event?.source?.width ?? 0;
+          const h = event?.source?.height ?? 0;
+          if (w > 0 && h > 0) onRatio(w / h);
+        }}
+      />
+    ) : (
+      <View style={[styles.photo, styles.photoFallback, { aspectRatio: ratio }]}>
+        <Text style={styles.photoFallbackText}>Photo en cours</Text>
+      </View>
+    )}
+  </View>
+);
+
+const ActionBar: React.FC<ActionBarProps> = ({ liked, onToggleLike, onToggleComments }) => (
+  <View style={styles.actionsRow}>
+    <View style={styles.actionsLeft}>
+      <Pressable hitSlop={12} onPress={onToggleLike}>
+        <Ionicons name={liked ? "heart" : "heart-outline"} size={24} color={liked ? "#DC2626" : "#111827"} />
+      </Pressable>
+      <Pressable hitSlop={12} onPress={onToggleComments}>
+        <Ionicons name="chatbubble-outline" size={23} color="#111827" />
+      </Pressable>
+      <Pressable hitSlop={12}>
+        <Ionicons name="paper-plane-outline" size={23} color="#111827" />
+      </Pressable>
+    </View>
+    <Pressable hitSlop={12}>
+      <Ionicons name="bookmark-outline" size={23} color="#111827" />
+    </Pressable>
+  </View>
+);
+
+const CommentSection: React.FC<CommentSectionProps> = ({ isOpen, comments, draft, onDraftChange, onSubmit }) => {
+  if (!isOpen) return null;
+  return (
+    <View style={styles.commentBox}>
+      <TextInput
+        placeholder="Ajouter un commentaire..."
+        placeholderTextColor="#9CA3AF"
+        value={draft}
+        onChangeText={onDraftChange}
+        style={styles.commentInput}
+        multiline
+      />
+      <Pressable style={styles.commentSend} hitSlop={8} onPress={onSubmit} disabled={!draft.trim()}>
+        <Ionicons name="send" size={18} color={draft.trim() ? "#2563EB" : "#9CA3AF"} />
+      </Pressable>
+      {comments.length ? (
+        <View style={styles.commentList}>
+          {comments.map((c) => {
+            const cName = displayName(c.profiles);
+            return (
+              <View key={c.id} style={styles.commentRow}>
+                <Text style={styles.commentAuthor}>{cName}</Text>
+                <Text style={styles.commentText}>{c.content}</Text>
+              </View>
+            );
+          })}
+        </View>
+      ) : null}
+    </View>
+  );
+};
+
+const CatchCard: React.FC<CatchCardProps> = React.memo(
+  ({
+    item,
+    likeCount,
+    commentCount,
+    liked,
+    photoRatio,
+    comments,
+    commentDraft,
+    commentOpen,
+    onToggleLike,
+    onToggleComments,
+    onSubmitComment,
+    onDraftChange,
+    onPhotoRatio,
+  }) => {
+    const name = displayName(item.profiles);
+    const photo = catchPhotoUrl(item.photo_path);
+    const date = formatDate(item.caught_at);
+    const captionPrefix = item.species ? item.species + (item.description ? " — " : "") : "";
+
+    return (
+      <View style={styles.card}>
+        <View style={styles.cardHeader}>
+          <UserAvatar profile={item.profiles} name={name} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.userName}>{name}</Text>
+            <Text style={styles.meta}>{date}</Text>
+          </View>
+          <Pressable hitSlop={10}>
+            <Ionicons name="ellipsis-horizontal" size={18} color="#111827" />
+          </Pressable>
+        </View>
+
+        <CatchPhoto photoUrl={photo} ratio={photoRatio} onRatio={(r) => onPhotoRatio(item.id, r)} />
+
+        <ActionBar
+          liked={liked}
+          onToggleLike={() => onToggleLike(item.id)}
+          onToggleComments={() => onToggleComments(item.id)}
+        />
+
+        <View style={styles.countRow}>
+          <Text style={styles.countText}>{likeCount} j'aime</Text>
+          <Pressable hitSlop={6} onPress={() => onToggleComments(item.id)}>
+            <Text style={styles.countText}>{commentCount} commentaires</Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.body}>
+          {item.region ? <Text style={styles.location}>Lieu : {item.region}</Text> : null}
+          {item.description ? (
+            <Text style={styles.description}>
+              <Text style={styles.speciesCaption}>{captionPrefix}</Text>
+              {item.description}
+            </Text>
+          ) : item.species ? (
+            <Text style={styles.speciesCaption}>{item.species}</Text>
+          ) : null}
+          <CommentSection
+            isOpen={commentOpen}
+            comments={comments}
+            draft={commentDraft}
+            onDraftChange={(text) => onDraftChange(item.id, text)}
+            onSubmit={() => onSubmitComment(item.id)}
+          />
+        </View>
+      </View>
+    );
+  }
+);
+
+// Screen --------------------------------------------------------------------
 export default function CommunityScreen() {
   const { session } = useAuth();
   const [feed, setFeed] = React.useState<FeedItem[]>([]);
@@ -98,6 +291,45 @@ export default function CommunityScreen() {
   const [commentDrafts, setCommentDrafts] = React.useState<Record<string, string>>({});
   const [commentOpen, setCommentOpen] = React.useState<Record<string, boolean>>({});
   const [commentsList, setCommentsList] = React.useState<Record<string, CommentRow[]>>({});
+
+  const loadComments = React.useCallback(async (ids: string[]) => {
+    if (!ids.length) return {} as Record<string, CommentRow[]>;
+    const next: Record<string, CommentRow[]> = {};
+    const { data, error: cError } = await supabase
+      .from("catch_comments")
+      .select(
+        "id,catch_id,content,created_at,profiles:profiles (id,username,first_name,last_name,avatar_url,avatar_path,photo_url,photo_path)"
+      )
+      .in("catch_id", ids)
+      .order("created_at", { ascending: false });
+    if (cError) return {};
+    for (const row of (data as CommentRow[]) ?? []) {
+      const cid = row.catch_id;
+      if (!cid) continue;
+      const list = next[cid] ?? [];
+      if (list.length < 3) list.push(row);
+      next[cid] = list;
+    }
+    return next;
+  }, []);
+
+  const loadMyLikes = React.useCallback(
+    async (ids: string[]) => {
+      if (!session?.user?.id || !ids.length) return {} as Record<string, boolean>;
+      const { data } = await supabase
+        .from("catch_likes")
+        .select("catch_id")
+        .eq("user_id", session.user.id)
+        .in("catch_id", ids);
+      const map: Record<string, boolean> = {};
+      for (const row of data ?? []) {
+        const cid = (row as any)?.catch_id;
+        if (cid) map[cid] = true;
+      }
+      return map;
+    },
+    [session?.user?.id]
+  );
 
   const fetchFeed = React.useCallback(async () => {
     setLoading(true);
@@ -115,62 +347,27 @@ export default function CommunityScreen() {
       if (dbError) throw dbError;
       const rows = (data as FeedItem[]) ?? [];
       setFeed(rows);
+
       const nextLikes: Record<string, number> = {};
       const nextComments: Record<string, number> = {};
-      const nextList: Record<string, CommentRow[]> = {};
       for (const row of rows) {
         nextLikes[row.id] = row.catch_likes?.[0]?.count ?? 0;
         nextComments[row.id] = row.catch_comments?.[0]?.count ?? 0;
-        nextList[row.id] = [];
       }
       setLikesById(nextLikes);
       setCommentsById(nextComments);
-      // Charge les derniers commentaires pour tous les posts visibles
-      if (rows.length) {
-        const ids = rows.map((r) => r.id);
-        const { data: fetchedComments, error: commentsError } = await supabase
-          .from("catch_comments")
-          .select(
-            "id,catch_id,content,created_at,profiles:profiles (id,username,first_name,last_name,avatar_url,avatar_path,photo_url,photo_path)"
-          )
-          .in("catch_id", ids)
-          .order("created_at", { ascending: false });
-        if (!commentsError && fetchedComments) {
-          for (const c of fetchedComments as CommentRow[]) {
-            const cid = c.catch_id;
-            if (!cid) continue;
-            const list = nextList[cid] || [];
-            if (list.length < 3) {
-              list.push(c);
-              nextList[cid] = list;
-            }
-          }
-        }
-      }
-      setCommentsList(nextList);
-      // Récupère les likes de l'utilisateur courant pour savoir quel coeur remplir
-      if (session?.user?.id && rows.length) {
-        const ids = rows.map((r) => r.id);
-        const { data: myLikes } = await supabase
-          .from("catch_likes")
-          .select("catch_id")
-          .eq("user_id", session.user.id)
-          .in("catch_id", ids);
-        const nextLiked: Record<string, boolean> = {};
-        for (const row of myLikes ?? []) {
-          if (row?.catch_id) nextLiked[row.catch_id as string] = true;
-        }
-        setLikedByMe(nextLiked);
-      } else {
-        setLikedByMe({});
-      }
+
+      const ids = rows.map((r) => r.id);
+      const [commentMap, likedMap] = await Promise.all([loadComments(ids), loadMyLikes(ids)]);
+      setCommentsList(commentMap);
+      setLikedByMe(likedMap);
     } catch (e: any) {
       setError(e?.message ?? "Flux indisponible");
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [loadComments, loadMyLikes]);
 
   React.useEffect(() => {
     fetchFeed();
@@ -183,9 +380,7 @@ export default function CommunityScreen() {
 
   const toggleLike = React.useCallback(
     async (catchId: string) => {
-      if (!session?.user?.id) {
-        return;
-      }
+      if (!session?.user?.id) return;
       const currentlyLiked = likedByMe[catchId] ?? false;
       setLikedByMe((prev) => ({ ...prev, [catchId]: !currentlyLiked }));
       setLikesById((prev) => ({
@@ -207,179 +402,55 @@ export default function CommunityScreen() {
       const draft = (commentDrafts[catchId] || "").trim();
       if (!draft) return;
       setCommentDrafts((prev) => ({ ...prev, [catchId]: "" }));
-      const { data, error } = await supabase
+      const { data, error: insertError } = await supabase
         .from("catch_comments")
-        .insert({
-          catch_id: catchId,
-          user_id: session.user.id,
-          content: draft,
-        })
+        .insert({ catch_id: catchId, user_id: session.user.id, content: draft })
         .select(
-          "id,content,created_at,profiles:profiles (id,username,first_name,last_name,avatar_url,avatar_path,photo_url,photo_path)"
+          "id,catch_id,content,created_at,profiles:profiles (id,username,first_name,last_name,avatar_url,avatar_path,photo_url,photo_path)"
         )
         .single();
-      if (!error && data) {
-        setCommentsList((prev) => ({
-          ...prev,
-          [catchId]: [data as CommentRow, ...(prev[catchId] ?? [])].slice(0, 3),
-        }));
+      if (!insertError && data) {
+        setCommentsList((prev) => {
+          const list = prev[catchId] ? [...prev[catchId]] : [];
+          list.unshift(data as CommentRow);
+          return { ...prev, [catchId]: list.slice(0, 3) };
+        });
+        setCommentsById((prev) => ({ ...prev, [catchId]: (prev[catchId] ?? 0) + 1 }));
       }
-      setCommentsById((prev) => ({ ...prev, [catchId]: (prev[catchId] ?? 0) + 1 }));
     },
     [commentDrafts, session?.user?.id]
   );
 
-  const renderItem = ({ item }: { item: FeedItem }) => {
-    const name = displayName(item.profiles);
-    const avatar = avatarUrlFromProfile(item.profiles);
-    const photo = catchPhotoUrl(item.photo_path);
-    const date = formatDate(item.caught_at);
-    const captionPrefix = item.species ? item.species + (item.description ? " — " : "") : "";
-    const ratio = photoRatios[item.id] || 4 / 5;
-    const liked = likedByMe[item.id] ?? false;
-    const likeCount = likesById[item.id] ?? 0;
-    const commentCount = commentsById[item.id] ?? 0;
-    const commentOpenForItem = commentOpen[item.id] ?? false;
-    const draft = commentDrafts[item.id] ?? "";
-    const commentItems = commentsList[item.id] ?? [];
-    return (
-      <View style={styles.card}>
-        <View style={styles.cardHeader}>
-          {avatar ? (
-            <Image source={{ uri: avatar }} style={styles.avatar} contentFit="cover" />
-          ) : (
-            <View style={[styles.avatar, styles.avatarFallback]}>
-              <Text style={styles.avatarInitial}>{name.slice(0, 1).toUpperCase()}</Text>
-            </View>
-          )}
-          <View style={{ flex: 1 }}>
-            <Text style={styles.userName}>{name}</Text>
-            <Text style={styles.meta}>{date}</Text>
-          </View>
-          <Pressable hitSlop={10}>
-            <Ionicons name="ellipsis-horizontal" size={18} color="#111827" />
-          </Pressable>
-        </View>
-        <View style={styles.photoWrapper}>
-          {photo ? (
-            <>
-              <Image
-                source={{ uri: photo }}
-                style={[styles.photo, { aspectRatio: ratio }]}
-                contentFit="contain"
-                onLoad={(event) => {
-                  const w = event?.source?.width ?? 0;
-                  const h = event?.source?.height ?? 0;
-                  if (w > 0 && h > 0) {
-                    setPhotoRatios((prev) =>
-                      prev[item.id] ? prev : { ...prev, [item.id]: w / h }
-                    );
-                  }
-                }}
-              />
-              {item.species ? (
-                <View style={styles.speciesBadge}>
-                  <Text style={styles.speciesText}>{item.species}</Text>
-                </View>
-              ) : null}
-            </>
-          ) : (
-            <View style={[styles.photo, styles.photoFallback, { aspectRatio: ratio }]}>
-              <Text style={styles.photoFallbackText}>Photo en cours</Text>
-            </View>
-          )}
-        </View>
-        <View style={styles.actionsRow}>
-          <View style={styles.actionsLeft}>
-            <Pressable hitSlop={12} onPress={() => toggleLike(item.id)}>
-              <Ionicons
-                name={liked ? "heart" : "heart-outline"}
-                size={24}
-                color={liked ? "#DC2626" : "#111827"}
-              />
-            </Pressable>
-            <Pressable
-              hitSlop={12}
-              onPress={() =>
-                setCommentOpen((prev) => ({ ...prev, [item.id]: !prev[item.id] }))
-              }
-            >
-              <Ionicons name="chatbubble-outline" size={23} color="#111827" />
-            </Pressable>
-            <Pressable hitSlop={12}>
-              <Ionicons name="paper-plane-outline" size={23} color="#111827" />
-            </Pressable>
-          </View>
-          <Pressable hitSlop={12}>
-            <Ionicons name="bookmark-outline" size={23} color="#111827" />
-          </Pressable>
-        </View>
-        <View style={styles.countRow}>
-          <Text style={styles.countText}>{likeCount} j'aime</Text>
-          <Pressable
-            hitSlop={6}
-            onPress={() =>
-              setCommentOpen((prev) => ({ ...prev, [item.id]: !prev[item.id] }))
-            }
-          >
-            <Text style={styles.countText}>{commentCount} commentaires</Text>
-          </Pressable>
-        </View>
-        <View style={styles.body}>
-          {item.region ? <Text style={styles.location}>Lieu : {item.region}</Text> : null}
-          {item.description ? (
-            <Text style={styles.description}>
-              <Text style={styles.speciesCaption}>{captionPrefix}</Text>
-              {item.description}
-            </Text>
-          ) : item.species ? (
-            <Text style={styles.speciesCaption}>{item.species}</Text>
-          ) : null}
-          {commentOpenForItem ? (
-            <View style={styles.commentBox}>
-              <TextInput
-                placeholder="Ajouter un commentaire..."
-                placeholderTextColor="#9CA3AF"
-                value={draft}
-                onChangeText={(text) =>
-                  setCommentDrafts((prev) => ({ ...prev, [item.id]: text }))
-                }
-                style={styles.commentInput}
-                multiline
-              />
-              <Pressable
-                style={styles.commentSend}
-                hitSlop={8}
-                onPress={() => submitComment(item.id)}
-                disabled={!draft.trim()}
-              >
-                <Ionicons
-                  name="send"
-                  size={18}
-                  color={draft.trim() ? "#2563EB" : "#9CA3AF"}
-                />
-              </Pressable>
-              {commentItems.length ? (
-                <View style={styles.commentList}>
-                  {commentItems.map((c) => {
-                    const cName = displayName(c.profiles);
-                    return (
-                      <View key={c.id} style={styles.commentRow}>
-                        <Text style={styles.commentAuthor}>{cName}</Text>
-                        <Text style={styles.commentText}>{c.content}</Text>
-                      </View>
-                    );
-                  })}
-                </View>
-              ) : null}
-            </View>
-          ) : null}
-        </View>
-      </View>
-    );
-  };
+  const onPhotoRatio = React.useCallback((id: string, ratio: number) => {
+    setPhotoRatios((prev) => (prev[id] ? prev : { ...prev, [id]: ratio }));
+  }, []);
 
-  const keyExtractor = (item: FeedItem) => item.id;
+  const onToggleComments = React.useCallback((id: string) => {
+    setCommentOpen((prev) => ({ ...prev, [id]: !prev[id] }));
+  }, []);
+
+  const renderItem = React.useCallback(
+    ({ item }: { item: FeedItem }) => (
+      <CatchCard
+        item={item}
+        likeCount={likesById[item.id] ?? 0}
+        commentCount={commentsById[item.id] ?? 0}
+        liked={likedByMe[item.id] ?? false}
+        photoRatio={photoRatios[item.id] ?? 4 / 5}
+        comments={commentsList[item.id] ?? []}
+        commentDraft={commentDrafts[item.id] ?? ""}
+        commentOpen={commentOpen[item.id] ?? false}
+        onToggleLike={toggleLike}
+        onToggleComments={onToggleComments}
+        onSubmitComment={submitComment}
+        onDraftChange={(cid, text) => setCommentDrafts((prev) => ({ ...prev, [cid]: text }))}
+        onPhotoRatio={onPhotoRatio}
+      />
+    ),
+    [likesById, commentsById, likedByMe, photoRatios, commentsList, commentDrafts, commentOpen, toggleLike, onToggleComments, submitComment, onPhotoRatio]
+  );
+
+  const keyExtractor = React.useCallback((item: FeedItem) => item.id, []);
 
   return (
     <ThemedSafeArea edges={["top"]} style={styles.safeArea}>
@@ -402,6 +473,12 @@ export default function CommunityScreen() {
           Les prises visibles par la communaute, classees par date.
         </ThemedText>
       </LinearGradient>
+      {error ? (
+        <View style={styles.errorBox}>
+          <Text style={styles.errorTitle}>Impossible de charger le fil</Text>
+          <Text style={styles.errorText}>{error}</Text>
+        </View>
+      ) : null}
       {loading ? (
         <View style={styles.center}>
           <ActivityIndicator />
@@ -421,20 +498,13 @@ export default function CommunityScreen() {
               </Text>
             </View>
           }
-          ListHeaderComponent={
-            error ? (
-              <View style={styles.errorBox}>
-                <Text style={styles.errorTitle}>Impossible de charger le fil</Text>
-                <Text style={styles.errorText}>{error}</Text>
-              </View>
-            ) : null
-          }
         />
       )}
     </ThemedSafeArea>
   );
 }
 
+// Styles --------------------------------------------------------------------
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
@@ -572,8 +642,9 @@ const styles = StyleSheet.create({
   emptyTitle: { fontWeight: "700", fontSize: 16 },
   emptySubtitle: { textAlign: "center", color: "#6B7280" },
   errorBox: {
-    marginBottom: 12,
     marginHorizontal: 16,
+    marginTop: 10,
+    marginBottom: 6,
     padding: 12,
     borderRadius: 12,
     backgroundColor: "#FEF2F2",
