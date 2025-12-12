@@ -1,14 +1,18 @@
 import React from 'react';
 import {
   Alert,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
+  TouchableWithoutFeedback,
   View,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { ThemedSafeArea } from '@/components/SafeArea';
 import { useAuth } from '@/providers/AuthProvider';
@@ -20,6 +24,7 @@ export default function UsernameStep() {
   const { session } = useAuth();
   const [username, setUsername] = React.useState('');
   const [submitting, setSubmitting] = React.useState(false);
+  const [focused, setFocused] = React.useState(false);
 
   React.useEffect(() => {
     let mounted = true;
@@ -46,7 +51,7 @@ export default function UsernameStep() {
       return;
     }
     if (!validateUsername(trimmed)) {
-      Alert.alert('Pseudo invalide', '3-20 caractères, lettres, chiffres, _ et .');
+      Alert.alert('Pseudo invalide', '3-20 caracteres, lettres, chiffres, _ et .');
       return;
     }
 
@@ -67,11 +72,11 @@ export default function UsernameStep() {
 
       if (checkErr) {
         throw new Error(
-          `${checkErr.message || 'Erreur de vérification'}\n\nAssure-toi que la colonne 'username' existe (unique) dans la table 'profiles'.`
+          `${checkErr.message || 'Erreur de verification'}\n\nAssure-toi que la colonne 'username' existe (unique) dans la table 'profiles'.`
         );
       }
       if (matches && matches.length > 0 && matches[0]?.id !== session.user.id) {
-        Alert.alert('Pseudo déjà pris', 'Merci d’en choisir un autre.');
+        Alert.alert('Pseudo deja pris', 'Merci den choisir un autre.');
         setSubmitting(false);
         return;
       }
@@ -85,79 +90,277 @@ export default function UsernameStep() {
     }
   };
 
-  const onBack = () => router.back();
-
   return (
-    <ThemedSafeArea>
+    <ThemedSafeArea edges={['top', 'bottom']} style={{ backgroundColor: '#ffffff' }}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1 }}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
-        <View style={styles.card}>
-          <Text style={styles.title}>Choisis ton pseudo</Text>
-          <Text style={styles.subtitle}>Il doit être unique</Text>
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+          <View style={styles.wrapper}>
+            <View style={styles.topAccent}>
+              <LinearGradient
+                colors={['#3B82F6', '#8B5CF6', '#EC4899']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.accentBar}
+              />
+            </View>
 
-          <TextInput
-            placeholder="Pseudo (ex: pecheur34)"
-            placeholderTextColor="#9CA3AF"
-            color="#111827"
-            autoCapitalize="none"
-            autoCorrect={false}
-            value={username}
-            onChangeText={setUsername}
-            style={styles.input}
-          />
-          <Text style={styles.help}>3-20 caractères, lettres, chiffres, _ et .</Text>
-
-          <View style={styles.row}>
-            <Pressable
-              style={[styles.button, styles.secondary]}
-              onPress={onBack}
-              disabled={submitting}
+            <ScrollView
+              style={styles.scrollView}
+              contentContainerStyle={styles.scrollContent}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
             >
-              <Text style={styles.secondaryText}>Retour</Text>
-            </Pressable>
-            <Pressable style={styles.button} onPress={onFinish} disabled={submitting}>
-              <Text style={styles.buttonText}>{submitting ? 'Vérification…' : 'Continuer'}</Text>
-            </Pressable>
+              <View style={styles.header}>
+                <View style={styles.progressContainer}>
+                  <View style={styles.progressBar}>
+                    <LinearGradient
+                      colors={['#3B82F6', '#2563EB']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={styles.progressFill}
+                    />
+                  </View>
+                  <Text style={styles.progressText}>5/6</Text>
+                </View>
+
+                <Text style={styles.title}>Choisis ton pseudo</Text>
+                <Text style={styles.subtitle}>Unique, simple a retenir, et sans espace.</Text>
+              </View>
+
+              <View style={styles.form}>
+                <View style={[styles.inputContainer, focused && styles.inputContainerFocused]}>
+                  <TextInput
+                    placeholder="Pseudo (ex: pecheur34)"
+                    placeholderTextColor="#94A3B8"
+                    color="#0f172a"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    value={username}
+                    onChangeText={setUsername}
+                    onFocus={() => setFocused(true)}
+                    onBlur={() => setFocused(false)}
+                    style={styles.input}
+                    maxLength={20}
+                    returnKeyType="done"
+                    onSubmitEditing={onFinish}
+                  />
+                </View>
+                <View style={styles.infoCard}>
+                  <LinearGradient
+                    colors={['#FEF3C7', '#FDE68A']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.infoBackground}
+                  />
+                  <View style={styles.infoAccent} />
+                  <View style={styles.infoContent}>
+                    <Text style={styles.infoIcon}>⚠️</Text>
+                    <Text style={styles.infoText}>
+                      Ce pseudo sera visible sur FishBook et ne pourra pas etre modifie par la suite.
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            </ScrollView>
+
+            <View style={styles.footer}>
+              <View style={styles.buttonRow}>
+                <Pressable style={styles.secondaryWrapper} onPress={() => router.back()} disabled={submitting}>
+                  <View style={styles.secondaryButton}>
+                    <Text style={styles.secondaryText}>Retour</Text>
+                  </View>
+                </Pressable>
+
+                <Pressable style={styles.primaryWrapper} onPress={onFinish} disabled={submitting}>
+                  <LinearGradient
+                    colors={['#3B82F6', '#2563EB']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={[styles.primaryButton, submitting && { opacity: 0.85 }]}
+                  >
+                    <Text style={styles.primaryText}>{submitting ? 'Verification...' : 'Continuer'}</Text>
+                    <View style={styles.arrowWrapper}>
+                      <Text style={styles.arrowIcon}>→</Text>
+                    </View>
+                  </LinearGradient>
+                </Pressable>
+              </View>
+            </View>
           </View>
-        </View>
+        </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
     </ThemedSafeArea>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 20 },
-  card: {
-    width: '100%',
-    maxWidth: 480,
-    gap: 8,
-    backgroundColor: '#fff',
-    borderRadius: 14,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
+  wrapper: { flex: 1, backgroundColor: '#ffffff' },
+  topAccent: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 3,
+    zIndex: 10,
   },
-  title: { fontSize: 22, fontWeight: '700' },
-  subtitle: { color: '#6B7280', marginBottom: 6 },
-  input: {
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 10,
-    padding: 12,
+  accentBar: { flex: 1 },
+  scrollView: { flex: 1 },
+  scrollContent: {
+    paddingHorizontal: 24,
+    paddingTop: 24,
+    paddingBottom: 20,
+    gap: 20,
   },
-  help: { color: '#9CA3AF', fontSize: 12, marginTop: -4 },
-  row: { flexDirection: 'row', gap: 10, marginTop: 6 },
-  button: {
-    flex: 1,
-    backgroundColor: '#1e90ff',
-    padding: 14,
-    borderRadius: 10,
+  header: { gap: 14 },
+  progressContainer: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 12,
   },
-  secondary: { backgroundColor: '#F3F4F6' },
-  buttonText: { color: 'white', fontWeight: '700' },
-  secondaryText: { color: '#111827', fontWeight: '600' },
+  progressBar: {
+    flex: 1,
+    height: 6,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 999,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    width: '83%',
+    height: '100%',
+  },
+  progressText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#64748B',
+    minWidth: 30,
+    textAlign: 'right',
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#0f172a',
+    letterSpacing: -0.3,
+    lineHeight: 34,
+  },
+  subtitle: {
+    color: '#64748B',
+    fontSize: 15,
+    lineHeight: 22,
+  },
+  form: { gap: 16 },
+  inputContainer: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: '#E2E8F0',
+  },
+  inputContainerFocused: {
+    borderColor: '#3B82F6',
+    backgroundColor: '#FFFFFF',
+  },
+  input: {
+    paddingVertical: 16,
+    paddingHorizontal: 18,
+    color: '#0f172a',
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  infoCard: {
+    flexDirection: 'row',
+    borderRadius: 14,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  infoBackground: {
+    ...StyleSheet.absoluteFillObject,
+    opacity: 0.88,
+  },
+  infoAccent: {
+    width: 4,
+    backgroundColor: '#F59E0B',
+  },
+  infoContent: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+  },
+  infoIcon: { fontSize: 16 },
+  infoText: {
+    flex: 1,
+    color: '#1E40AF',
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: '500',
+  },
+  footer: {
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    paddingBottom: 28,
+    backgroundColor: '#ffffff',
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  secondaryWrapper: {
+    flex: 1,
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: '#E2E8F0',
+  },
+  secondaryButton: {
+    paddingVertical: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F8FAFC',
+  },
+  secondaryText: {
+    color: '#1E293B',
+    fontWeight: '700',
+    fontSize: 17,
+  },
+  primaryWrapper: {
+    flex: 1,
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: '#3B82F6',
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 8,
+  },
+  primaryButton: {
+    paddingVertical: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  primaryText: {
+    color: '#ffffff',
+    fontWeight: '800',
+    fontSize: 17,
+    letterSpacing: 0.3,
+  },
+  arrowWrapper: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  arrowIcon: {
+    color: '#ffffff',
+    fontSize: 18,
+    fontWeight: '700',
+  },
 });
