@@ -7,10 +7,8 @@ type Props = {
 };
 
 export function SocialAuthButtons({ disabled }: Props) {
-  const onGoogle = () =>
-    Alert.alert('Bientôt', 'La connexion avec Google arrive bientôt.');
-  const onApple = () =>
-    Alert.alert('Bientôt', 'La connexion avec Apple arrive bientôt.');
+  const onGoogle = () => Alert.alert('Bientot', 'La connexion avec Google arrive bientot.');
+  const onApple = () => Alert.alert('Bientot', 'La connexion avec Apple arrive bientot.');
 
   return (
     <View style={styles.stack}>
@@ -74,4 +72,3 @@ const styles = StyleSheet.create({
 });
 
 export default SocialAuthButtons;
-

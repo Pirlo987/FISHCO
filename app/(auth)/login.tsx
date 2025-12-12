@@ -1,10 +1,27 @@
 import React from 'react';
-import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  Alert,
+  KeyboardAvoidingView,
+  Keyboard,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+  TouchableWithoutFeedback,
+  Animated,
+  Easing,
+} from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Link, useRouter } from 'expo-router';
-import { supabase } from '@/lib/supabase';
-import { ThemedSafeArea } from '@/components/SafeArea';
-import SocialAuthButtons from '@/components/SocialAuthButtons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Ionicons } from '@expo/vector-icons';
+import * as AppleAuthentication from 'expo-apple-authentication';
+import * as Crypto from 'expo-crypto';
+
+import { ThemedSafeArea } from '@/components/SafeArea';
+import { supabase } from '@/lib/supabase';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -13,6 +30,67 @@ export default function LoginScreen() {
   const [email, setEmail] = React.useState('');
   const [password, setPassword] = React.useState('');
   const [loading, setLoading] = React.useState(false);
+  const keyboardAnim = React.useRef(new Animated.Value(0)).current;
+
+  React.useEffect(() => {
+    const showSub = Keyboard.addListener('keyboardWillShow', () => {
+      Animated.timing(keyboardAnim, {
+        toValue: -24,
+        duration: 250,
+        easing: Easing.out(Easing.ease),
+        useNativeDriver: true,
+      }).start();
+    });
+    const hideSub = Keyboard.addListener('keyboardWillHide', () => {
+      Animated.timing(keyboardAnim, {
+        toValue: 0,
+        duration: 220,
+        easing: Easing.out(Easing.ease),
+        useNativeDriver: true,
+      }).start();
+    });
+    const showSubAndroid = Keyboard.addListener('keyboardDidShow', () => {
+      Animated.timing(keyboardAnim, {
+        toValue: -16,
+        duration: 220,
+        easing: Easing.out(Easing.ease),
+        useNativeDriver: true,
+      }).start();
+    });
+    const hideSubAndroid = Keyboard.addListener('keyboardDidHide', () => {
+      Animated.timing(keyboardAnim, {
+        toValue: 0,
+        duration: 200,
+        easing: Easing.out(Easing.ease),
+        useNativeDriver: true,
+      }).start();
+    });
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+      showSubAndroid.remove();
+      hideSubAndroid.remove();
+    };
+  }, [keyboardAnim]);
+
+  const completeSignin = React.useCallback(
+    async (userId?: string | null) => {
+      if (!userId) {
+        router.replace('/(tabs)');
+        return;
+      }
+      const { data: prof } = await supabase.from('profiles').select('id').eq('id', userId).maybeSingle();
+      const profileExists = !!prof;
+      if (profileExists) {
+        await AsyncStorage.removeItem('profile_onboarding_pending');
+        router.replace('/(tabs)');
+      } else {
+        await AsyncStorage.setItem('profile_onboarding_pending', '1');
+        router.replace('/(onboarding)/name');
+      }
+    },
+    [router]
+  );
 
   const onLogin = async () => {
     if (!email || !password) {
@@ -23,152 +101,204 @@ export default function LoginScreen() {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
       setLoading(false);
-      Alert.alert('Connexion échouée', error.message);
+      Alert.alert('Connexion echouee', error.message);
       return;
     }
     try {
-      const userId = data.user?.id;
-      if (!userId) {
-        setLoading(false);
-        router.replace('/(tabs)');
+      await completeSignin(data.user?.id ?? data.session?.user?.id);
+    } catch (_) {
+      router.replace('/(tabs)');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onApple = async () => {
+    setLoading(true);
+    try {
+      const rawNonce = Math.random().toString(36).slice(2);
+      const hashedNonce = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, rawNonce);
+
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+        nonce: hashedNonce,
+      });
+
+      if (!credential.identityToken) {
+        throw new Error('Token Apple non fourni.');
+      }
+
+      const { data, error } = await supabase.auth.signInWithIdToken({
+        provider: 'apple',
+        token: credential.identityToken,
+        nonce: rawNonce,
+      });
+
+      if (error) throw error;
+
+      await completeSignin(data.user?.id ?? data.session?.user?.id);
+    } catch (err: any) {
+      if (err?.code === 'ERR_REQUEST_CANCELED' || err?.code === 'ERR_CANCELED') {
         return;
       }
-      // Check if profile exists in 'profiles' table
-      const { data: prof } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('id', userId)
-        .maybeSingle();
-      const profileExists = !!prof;
+      Alert.alert('Connexion Apple echouee', err?.message || 'Reessaie dans quelques instants.');
+    } finally {
       setLoading(false);
-      if (profileExists) {
-        await AsyncStorage.removeItem('profile_onboarding_pending');
-        router.replace('/(tabs)');
-      } else {
-        await AsyncStorage.setItem('profile_onboarding_pending', '1');
-        router.replace('/(onboarding)/name');
-      }
-    } catch (_) {
-      setLoading(false);
-      router.replace('/(tabs)');
     }
   };
 
   return (
-    <ThemedSafeArea edges={['top','bottom']}>
+    <ThemedSafeArea edges={['top', 'bottom']} style={{ backgroundColor: '#ffffff' }}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-        <ScrollView
-          keyboardShouldPersistTaps="always"
-          contentContainerStyle={styles.container}
-        >
-          <View style={styles.header}>
-            <Text style={styles.appEmoji}>🐟</Text>
-            <Text style={styles.appTitle}>Fishco</Text>
-          </View>
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+          <Animated.View style={[styles.container, { transform: [{ translateY: keyboardAnim }] }]}>
+            <View style={styles.content}>
+              <View style={styles.header}>
+                <Text style={styles.title}>Connexion</Text>
+                <Text style={styles.subtitle}>Reprends ton aventure</Text>
+              </View>
 
-          <View style={styles.card}>
-            <Text style={styles.title}>Bienvenue 👋</Text>
-            <Text style={styles.subtitle}>Connecte-toi pour continuer</Text>
+              <View style={styles.socialStack}>
+                <View style={styles.socialRow}>
+                  {Platform.OS === 'ios' && (
+                    <Pressable
+                      disabled={loading}
+                      onPress={onApple}
+                      style={({ pressed }) => [styles.socialBtn, pressed && { opacity: 0.85 }]}
+                      accessibilityRole="button"
+                      accessibilityLabel="Continuer avec Apple"
+                    >
+                      <Ionicons name="logo-apple" size={22} color="#111827" />
+                    </Pressable>
+                  )}
+                  <Pressable
+                    disabled={loading}
+                    onPress={() => Alert.alert('Bientot', 'La connexion avec Google arrive bientot.')}
+                    style={({ pressed }) => [styles.socialBtn, pressed && { opacity: 0.85 }]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Continuer avec Google"
+                  >
+                    <Ionicons name="logo-google" size={22} color="#DB4437" />
+                  </Pressable>
+                  <Pressable
+                    disabled={loading}
+                    onPress={() => Alert.alert('Bientot', 'La connexion avec Facebook arrive bientot.')}
+                    style={({ pressed }) => [styles.socialBtn, pressed && { opacity: 0.85 }]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Continuer avec Facebook"
+                  >
+                    <Ionicons name="logo-facebook" size={22} color="#1877F2" />
+                  </Pressable>
+                </View>
+                <View style={styles.dividerRow}>
+                  <View style={styles.divider} />
+                  <Text style={styles.dividerText}>ou connexion par email</Text>
+                  <View style={styles.divider} />
+                </View>
+              </View>
 
-            <TextInput
-              ref={emailRef}
-              placeholder="Email"
-              autoCapitalize="none"
-              keyboardType="email-address"
-              value={email}
-              onChangeText={setEmail}
-              style={styles.input}
-              placeholderTextColor="#9CA3AF"
-              color="#111827"
-              returnKeyType="next"
-              showSoftInputOnFocus={true}
-              blurOnSubmit={false}
-              onSubmitEditing={() => passwordRef.current?.focus()}
-            />
-            <TextInput
-              ref={passwordRef}
-              placeholder="Mot de passe"
-              secureTextEntry
-              value={password}
-              onChangeText={setPassword}
-              style={styles.input}
-              placeholderTextColor="#9CA3AF"
-              color="#111827"
-              returnKeyType="done"
-              showSoftInputOnFocus={true}
-            />
+              <View style={styles.form}>
+                <Text style={styles.label}>Email</Text>
+                <TextInput
+                  ref={emailRef}
+                  placeholder="ton.email@mail.com"
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                  value={email}
+                  onChangeText={setEmail}
+                  style={styles.input}
+                  placeholderTextColor="#A0A7B1"
+                  autoCorrect={false}
+                  returnKeyType="next"
+                  onSubmitEditing={() => passwordRef.current?.focus()}
+                />
 
-            <Pressable
-              onPress={onLogin}
-              style={[styles.button, loading && { opacity: 0.7 }]}
-              disabled={loading}
-            >
-              <Text style={styles.buttonText}>
-                {loading ? 'Connexion…' : 'Se connecter'}
-              </Text>
-            </Pressable>
-
-            <View style={styles.separatorRow}>
-              <View style={styles.separator} />
-              <Text style={styles.sepText}>ou</Text>
-              <View style={styles.separator} />
+                <Text style={styles.label}>Mot de passe</Text>
+                <TextInput
+                  ref={passwordRef}
+                  placeholder="********"
+                  secureTextEntry
+                  value={password}
+                  onChangeText={setPassword}
+                  style={styles.input}
+                  placeholderTextColor="#A0A7B1"
+                  returnKeyType="done"
+                />
+              </View>
             </View>
 
-            <SocialAuthButtons disabled={loading} />
+            <View style={styles.ctaBlock}>
+              <Pressable onPress={onLogin} disabled={loading} style={styles.primaryWrapper}>
+                <LinearGradient
+                  colors={['#2563EB', '#1D4ED8']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={[styles.primaryButton, loading && { opacity: 0.88 }]}
+                >
+                  <Text style={styles.primaryText}>{loading ? 'Connexion...' : 'Se connecter'}</Text>
+                </LinearGradient>
+              </Pressable>
 
-            <Text style={styles.bottomText}>
-              Pas de compte ? <Link href="/(auth)/register">S'inscrire</Link>
-            </Text>
-
-            <Pressable onPress={() => emailRef.current?.focus()} accessibilityRole="button" style={{ marginTop: 6, alignSelf: 'center' }}>
-              <Text style={{ color: '#9CA3AF', fontSize: 12 }}>Problème de clavier ? Appuie ici pour focus email</Text>
-            </Pressable>
-          </View>
-        </ScrollView>
+              <View style={styles.bottomRow}>
+                <Text style={styles.bottomText}>Pas encore de compte ? </Text>
+                <Link href="/(auth)/register" style={styles.link}>
+                  Creer un compte
+                </Link>
+              </View>
+            </View>
+          </Animated.View>
+        </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
     </ThemedSafeArea>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', padding: 20 },
-  header: { alignItems: 'center', marginBottom: 16 },
-  appEmoji: { fontSize: 32 },
-  appTitle: { fontSize: 18, fontWeight: '600', marginTop: 4 },
-  card: {
-    width: '100%',
-    maxWidth: 420,
-    gap: 12,
-    backgroundColor: '#fff',
+  container: { flex: 1, padding: 24, backgroundColor: '#ffffff', justifyContent: 'space-between' },
+  content: { gap: 28 },
+  header: { alignItems: 'center', gap: 6 },
+  title: { color: '#0f172a', fontSize: 24, fontWeight: '800' },
+  subtitle: { color: '#6b7280', fontSize: 15 },
+  socialStack: { gap: 18 },
+  socialRow: { flexDirection: 'row', gap: 12, justifyContent: 'space-between' },
+  socialBtn: {
+    flex: 1,
+    height: 58,
     borderRadius: 14,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
+    backgroundColor: '#f3f4f6',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  title: { fontSize: 24, fontWeight: '700' },
-  subtitle: { color: '#6B7280', marginBottom: 6 },
+  dividerRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  divider: { flex: 1, height: 1, backgroundColor: '#e5e7eb' },
+  dividerText: { color: '#9ca3af', fontSize: 12 },
+  form: { gap: 16 },
+  label: { color: '#111827', fontWeight: '600', fontSize: 15, marginTop: 4 },
   input: {
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 10,
-    padding: 12,
+    backgroundColor: '#f3f4f6',
+    borderWidth: 0,
+    borderRadius: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    color: '#0f172a',
+    fontSize: 15,
   },
-  button: {
-    backgroundColor: '#1e90ff',
-    padding: 14,
-    borderRadius: 10,
-    alignItems: 'center',
+  ctaBlock: { gap: 14, marginTop: 16, paddingBottom: 8 },
+  primaryWrapper: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: '#1E3A8A',
+    shadowOpacity: 0.2,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 7,
   },
-  buttonText: { color: 'white', fontWeight: '700' },
-  separatorRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginTop: 2,
-    marginBottom: 2,
-  },
-  separator: { flex: 1, height: 1, backgroundColor: '#E5E7EB' },
-  sepText: { color: '#9CA3AF', fontSize: 12 },
-  bottomText: { textAlign: 'center', marginTop: 8 },
+  primaryButton: { paddingVertical: 17, alignItems: 'center', borderRadius: 999 },
+  primaryText: { color: '#f8fafc', fontWeight: '800', fontSize: 16, letterSpacing: 0.2 },
+  bottomRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 6 },
+  bottomText: { color: '#6b7280' },
+  link: { color: '#0f2c3f', fontWeight: '700' },
 });

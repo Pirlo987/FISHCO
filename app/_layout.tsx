@@ -4,6 +4,7 @@ import 'react-native-reanimated';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
 import { Stack, usePathname, useRouter, useSegments } from 'expo-router';
+import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import React from 'react';
 
@@ -11,7 +12,18 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 import { AuthProvider, useAuth } from '@/providers/AuthProvider';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-function AuthGate({ children }: { children: React.ReactNode }) {
+// Keep the splash screen visible until we finish loading critical app state.
+SplashScreen.preventAutoHideAsync().catch(() => {
+  /* Avoid crashing if the splash screen was already controlled elsewhere */
+});
+
+function AuthGate({
+  children,
+  onReady,
+}: {
+  children: React.ReactNode;
+  onReady?: () => void;
+}) {
   const { session, initialized } = useAuth();
   const segments = useSegments();
   const pathname = usePathname();
@@ -20,6 +32,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   const [hasSeenOnboarding, setHasSeenOnboarding] = React.useState<boolean | null>(null);
   const [profilePending, setProfilePending] = React.useState<boolean | null>(null);
   const [profileDone, setProfileDone] = React.useState<boolean | null>(null);
+  const hasSignaledReady = React.useRef(false);
 
   // Re-check onboarding flag when navigation segments change so we don't loop back
   // to onboarding after pressing "Commencer".
@@ -44,6 +57,16 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       mounted = false;
     };
   }, [segments]);
+
+  // Notify root layout once auth state and onboarding flags are ready so the splash
+  // screen can be dismissed.
+  React.useEffect(() => {
+    if (!initialized || !onboardingChecked) return;
+    if (hasSeenOnboarding === null || profilePending === null || profileDone === null) return;
+    if (hasSignaledReady.current) return;
+    hasSignaledReady.current = true;
+    onReady?.();
+  }, [initialized, onboardingChecked, hasSeenOnboarding, profilePending, profileDone, onReady]);
 
   React.useEffect(() => {
     if (!initialized || !onboardingChecked || hasSeenOnboarding === null || profilePending === null || profileDone === null) return;
@@ -90,16 +113,24 @@ export default function RootLayout() {
   const [loaded] = useFonts({
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
   });
+  const [appReady, setAppReady] = React.useState(false);
 
-  if (!loaded) {
-    // Async font loading only occurs in development.
-    return null;
-  }
+  const handleAuthReady = React.useCallback(() => {
+    setAppReady(true);
+  }, []);
+
+  React.useEffect(() => {
+    if (loaded && appReady) {
+      SplashScreen.hideAsync().catch(() => {
+        /* noop */
+      });
+    }
+  }, [loaded, appReady]);
 
   return (
     <AuthProvider>
       <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-        <AuthGate>
+        <AuthGate onReady={handleAuthReady}>
           <Stack>
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
             <Stack.Screen name="(auth)" options={{ headerShown: false }} />
