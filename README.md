@@ -58,3 +58,16 @@ La détection automatique de l'espèce exploite une fonction Edge Supabase (`det
    - `OPENAI_API_KEY` (obligatoire)
    - `OPENAI_MODEL` (optionnel, défaut `gpt-4o-mini`)
 3. Dans l'app Expo, assurez-vous que `.env` contient `EXPO_PUBLIC_SPECIES_AI_FUNCTION=detect-species` (ou un autre nom si vous l'avez modifié) puis relancez Expo pour recharger l'env.
+
+## Connexion Google (Supabase + Expo)
+
+1. Activez Google dans Supabase : Dashboard → Authentication → Providers → Google. Renseignez le `Client ID`/`Client secret` récupérés dans la console Google Cloud.
+2. Créez vos identifiants OAuth sur Google Cloud :
+   - Client iOS : type "iOS", bundle `com.fishco.app`.
+   - Client Android : type "Android", package `com.fishco.app`, ajoutez les empreintes SHA-1/256 de votre build (dev client ou keystore).
+   - Client Web : type "Web". Si vous testez en web/Expo Go, ajoutez l'URI de redirection proxy Expo `https://auth.expo.io/@<votre-compte-expo>/fishco`.
+3. Ajoutez les IDs dans `.env` (puis redémarrez Metro) :
+   - `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=...`
+   - `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID=...`
+   - `EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID=...`
+4. Lancez l'app (`npx expo start`). Les boutons "Continuer avec Google" utilisent `expo-auth-session` pour récupérer l'id token et l'envoyer à Supabase (`signInWithIdToken`).
