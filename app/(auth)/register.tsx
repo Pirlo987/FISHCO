@@ -22,6 +22,7 @@ import * as Crypto from 'expo-crypto';
 
 import { ThemedSafeArea } from '@/components/SafeArea';
 import { supabase } from '@/lib/supabase';
+import { useGoogleAuth } from '@/hooks/useGoogleAuth';
 
 export default function RegisterScreen() {
   const router = useRouter();
@@ -114,6 +115,22 @@ export default function RegisterScreen() {
     router.replace('/(onboarding)/name');
   };
 
+  const { signInWithGoogle } = useGoogleAuth({ onSuccess: completeAfterAuth });
+
+  const onGoogle = async () => {
+    setLoading(true);
+    try {
+      await signInWithGoogle();
+    } catch (err: any) {
+      if (err?.message?.includes('annulee')) {
+        return;
+      }
+      Alert.alert('Inscription Google echouee', err?.message || 'Reessaie dans quelques instants.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const onApple = async () => {
     setLoading(true);
     try {
@@ -177,7 +194,7 @@ export default function RegisterScreen() {
                   )}
                   <Pressable
                     disabled={loading}
-                    onPress={() => Alert.alert('Bientot', "L'inscription avec Google arrive bientot.")}
+                    onPress={onGoogle}
                     style={({ pressed }) => [styles.socialBtn, pressed && { opacity: 0.85 }]}
                     accessibilityRole="button"
                     accessibilityLabel="Continuer avec Google"
