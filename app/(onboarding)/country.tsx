@@ -287,7 +287,7 @@ export default function CountryStep() {
                     style={styles.progressFill}
                   />
                 </View>
-                <Text style={styles.progressText}>2/3</Text>
+                <Text style={styles.progressText}>2/6</Text>
               </View>
 
               <Text style={styles.title}>Ville et{'\n'}pays</Text>
@@ -502,7 +502,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   progressFill: {
-    width: '66.66%',
+    width: '33.33%',
     height: '100%',
   },
   progressText: {

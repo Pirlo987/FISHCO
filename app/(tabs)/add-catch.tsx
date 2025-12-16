@@ -29,6 +29,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { decode } from 'base64-arraybuffer';
 import { ThemedSafeArea } from '@/components/SafeArea';
 import { FISH_SPECIES, normalizeName, type Species } from '@/constants/species';
+import { awardCatchPoints } from '@/lib/gamification';
 
 const SPECIES_AI_FUNCTION =
   process.env.EXPO_PUBLIC_SPECIES_AI_FUNCTION ?? 'detect-species';
@@ -469,6 +470,7 @@ export default function AddCatchScreen() {
     setLoading(true);
 
     let photoPath: string | undefined;
+    let previousBest: { weight_kg: number | null; length_cm: number | null } | null = null;
     let insertedCatch: { id?: string } | null = null;
     if (!image?.uri) {
       setLoading(false);
@@ -519,9 +521,26 @@ export default function AddCatchScreen() {
       is_public: visibility === 'public',
       description: description.trim() || null,
     };
+    const weightValue = weight.trim() ? parseFloat(weight.replace(',', '.')) : null;
+    const lengthValue = length.trim() ? parseFloat(length.replace(',', '.')) : null;
+
     if (photoPath) payload.photo_path = photoPath;
-    if (weight.trim()) payload.weight_kg = parseFloat(weight.replace(',', '.'));
-    if (length.trim()) payload.length_cm = parseFloat(length.replace(',', '.'));
+    if (weightValue !== null && !Number.isNaN(weightValue)) payload.weight_kg = weightValue;
+    if (lengthValue !== null && !Number.isNaN(lengthValue)) payload.length_cm = lengthValue;
+
+    if (alreadyDiscovered) {
+      try {
+        const { data: best } = await supabase
+          .from('catches')
+          .select('weight_kg,length_cm')
+          .eq('user_id', session!.user.id)
+          .ilike('species', trimmedSpecies)
+          .order('weight_kg', { descending: true, nullsLast: true })
+          .order('length_cm', { descending: true, nullsLast: true })
+          .limit(1);
+        previousBest = (best?.[0] as any) ?? null;
+      } catch {}
+    }
 
     if (!isKnownSpecies) {
       try {
@@ -584,6 +603,24 @@ export default function AddCatchScreen() {
     resetForm();
 
     router.replace('/(tabs)/explore');
+
+    const isPersonalBest =
+      !!previousBest &&
+      ((payload.weight_kg && previousBest.weight_kg && payload.weight_kg > previousBest.weight_kg) ||
+        (payload.length_cm && previousBest.length_cm && payload.length_cm > previousBest.length_cm));
+
+    // Gamification: award points (fire-and-forget to avoid blocking UI)
+    awardCatchPoints({
+      session,
+      catchId: insertedCatch?.id,
+      species: trimmedSpecies,
+      knownSpecies: isKnownSpecies,
+      firstForUser: !alreadyDiscovered,
+      isPublic: visibility === 'public',
+      personalBest: isPersonalBest,
+    }).catch(() => {
+      /* non critical */
+    });
 
     setTimeout(() => {
       try {
@@ -1148,8 +1185,6 @@ const styles = StyleSheet.create({
     minHeight: 110,
   },
 });
-
-
 
 
 

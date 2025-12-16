@@ -17,6 +17,7 @@ import { ThemedSafeArea } from "@/components/SafeArea";
 import { ThemedText } from "@/components/ThemedText";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/AuthProvider";
+import { awardLikeGiven, awardLikeReceived } from "@/lib/gamification";
 
 // Types ---------------------------------------------------------------------
 type Profile = {
@@ -292,6 +293,14 @@ export default function CommunityScreen() {
   const [commentOpen, setCommentOpen] = React.useState<Record<string, boolean>>({});
   const [commentsList, setCommentsList] = React.useState<Record<string, CommentRow[]>>({});
 
+  const ownerByCatch = React.useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const item of feed) {
+      if (item.id && item.user_id) map[item.id] = item.user_id;
+    }
+    return map;
+  }, [feed]);
+
   const loadComments = React.useCallback(async (ids: string[]) => {
     if (!ids.length) return {} as Record<string, CommentRow[]>;
     const next: Record<string, CommentRow[]> = {};
@@ -391,9 +400,18 @@ export default function CommunityScreen() {
         await supabase.from("catch_likes").delete().eq("catch_id", catchId).eq("user_id", session.user.id);
       } else {
         await supabase.from("catch_likes").upsert({ catch_id: catchId, user_id: session.user.id });
+        awardLikeGiven(session, catchId).catch(() => {
+          /* best-effort */
+        });
+        const ownerId = ownerByCatch[catchId];
+        if (ownerId && ownerId !== session.user.id) {
+          awardLikeReceived(ownerId, catchId).catch(() => {
+            /* best-effort */
+          });
+        }
       }
     },
-    [likedByMe, session?.user?.id]
+    [likedByMe, ownerByCatch, session]
   );
 
   const submitComment = React.useCallback(
