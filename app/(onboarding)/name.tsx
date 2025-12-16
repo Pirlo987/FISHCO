@@ -134,7 +134,7 @@ export default function NameStep() {
                     style={styles.progressFill}
                   />
                 </View>
-                <Text style={styles.progressText}>1/3</Text>
+                <Text style={styles.progressText}>1/6</Text>
               </View>
 
               <Text style={styles.title}>Informations{'\n'}personnelles</Text>
@@ -284,7 +284,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   progressFill: {
-    width: '33.33%',
+    width: '16.67%',
     height: '100%',
   },
   progressText: {

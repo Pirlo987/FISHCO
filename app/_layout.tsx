@@ -38,6 +38,7 @@ function AuthGate({
   // to onboarding after pressing "Commencer".
   React.useEffect(() => {
     let mounted = true;
+    setOnboardingChecked(false);
     Promise.all([
       AsyncStorage.getItem('onboarding_seen'),
       AsyncStorage.getItem('profile_onboarding_pending'),

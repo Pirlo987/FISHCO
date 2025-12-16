@@ -114,7 +114,7 @@ export default function LevelStep() {
                     style={styles.progressFill}
                   />
                 </View>
-                <Text style={styles.progressText}>4/5</Text>
+                <Text style={styles.progressText}>4/6</Text>
               </View>
 
               <Text style={styles.title}>Ton niveau{'\n'}de pêche</Text>
@@ -240,7 +240,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   progressFill: {
-    width: '80%',
+    width: '66.67%',
     height: '100%',
   },
   progressText: {

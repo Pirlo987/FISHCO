@@ -1,10 +1,19 @@
 import React from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Animated,
+  Easing,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from 'react-native';
 import { useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import * as Location from 'expo-location';
 
 import { ThemedText } from '@/components/ThemedText';
@@ -12,6 +21,7 @@ import { ThemedView } from '@/components/ThemedView';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/lib/supabase';
 import { events } from '@/lib/events';
+import { LEVEL_TITLES, titleForPoints } from '@/lib/gamification';
 
 type CatchSummary = {
   id: string;
@@ -38,6 +48,10 @@ type ProfileRow = {
   avatar_path: string | null;
   photo_url: string | null;
   photo_path: string | null;
+};
+
+type PointsRow = {
+  points: number;
 };
 
 const friendsHighlight = {
@@ -88,6 +102,18 @@ const avatarUrlFromProfile = (profile: ProfileRow | null) => {
   return null;
 };
 
+const computeLevelProgress = (value: number) => {
+  const points = Number.isFinite(value) ? value : 0;
+  const sorted = [...LEVEL_TITLES].sort((a, b) => a.min - b.min);
+  const current = sorted.filter((t) => points >= t.min).pop() ?? sorted[0];
+  const next = sorted.find((t) => t.min > current.min);
+  if (!next) return { ratio: 1, current, next: null, remaining: 0 };
+  const span = next.min - current.min;
+  const ratio = Math.min(1, Math.max(0, (points - current.min) / span));
+  const remaining = Math.max(0, next.min - points);
+  return { ratio, current, next, remaining };
+};
+
 export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -99,6 +125,10 @@ export default function HomeScreen() {
   const [weatherError, setWeatherError] = React.useState<string | null>(null);
   const [profile, setProfile] = React.useState<ProfileRow | null>(null);
   const [profileAvatarUrl, setProfileAvatarUrl] = React.useState<string | null>(null);
+  const [points, setPoints] = React.useState<number>(0);
+  const [loadingPoints, setLoadingPoints] = React.useState(false);
+  const animatedPoints = React.useRef(new Animated.Value(0)).current;
+  const [displayPoints, setDisplayPoints] = React.useState<number>(0);
 
   const degreeSymbol = String.fromCharCode(176);
   const formatTemperature = React.useCallback(
@@ -266,6 +296,13 @@ export default function HomeScreen() {
     return emailName ?? 'there';
   }, [profile?.first_name, profile?.username, session?.user?.email]);
 
+  const currentTitle = React.useMemo(() => titleForPoints(points), [points]);
+  const levelProgress = React.useMemo(() => computeLevelProgress(points), [points]);
+  const animatedLevelProgress = React.useMemo(
+    () => computeLevelProgress(displayPoints),
+    [displayPoints]
+  );
+
   const profileInitials = React.useMemo(() => {
     const syllables = [profile?.first_name, profile?.last_name]
       .map((part) => (part ? part.trim().charAt(0).toUpperCase() : ''))
@@ -276,6 +313,55 @@ export default function HomeScreen() {
     if (session?.user?.email) return session.user.email.charAt(0).toUpperCase();
     return '?';
   }, [profile?.first_name, profile?.last_name, profile?.username, session?.user?.email]);
+
+  const loadPoints = React.useCallback(async () => {
+    if (!session?.user?.id) {
+      setPoints(0);
+      return;
+    }
+    try {
+      setLoadingPoints(true);
+      const { data: pts } = await supabase
+        .from('profile_points')
+        .select('points')
+        .eq('user_id', session.user.id)
+        .maybeSingle();
+      const value = (pts as PointsRow | null)?.points ?? 0;
+      setPoints(Number.isFinite(value) ? value : 0);
+    } catch (error) {
+      console.warn('HomeScreen: unable to load points', error);
+      setPoints(0);
+    } finally {
+      setLoadingPoints(false);
+    }
+  }, [session?.user?.id]);
+
+  React.useEffect(() => {
+    loadPoints();
+  }, [loadPoints]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      loadPoints();
+    }, [loadPoints])
+  );
+
+  // Animate displayed points whenever the absolute value changes
+  React.useEffect(() => {
+    const id = animatedPoints.addListener(({ value }) => {
+      setDisplayPoints(Math.round(value));
+    });
+    return () => animatedPoints.removeListener(id);
+  }, [animatedPoints]);
+
+  React.useEffect(() => {
+    Animated.timing(animatedPoints, {
+      toValue: points,
+      duration: 2000,
+      easing: Easing.out(Easing.quad),
+      useNativeDriver: false,
+    }).start();
+  }, [animatedPoints, points]);
 
   const handleProfilePress = React.useCallback(() => {
     router.push('/profile');
@@ -312,10 +398,8 @@ export default function HomeScreen() {
               )}
             </Pressable>
             <View>
-              <ThemedText style={styles.greeting}>Hello, {greetingName}</ThemedText>
-              <ThemedText style={styles.profileLevel} lightColor="#8E8E93" darkColor="#B0B0B5">
-                Novice
-              </ThemedText>
+              <ThemedText style={styles.greetingPrefix}>Hello,</ThemedText>
+              <ThemedText style={styles.greetingName}>{greetingName?.toUpperCase()}</ThemedText>
             </View>
           </View>
           <Pressable style={styles.notificationButton} accessibilityRole="button">
@@ -324,28 +408,63 @@ export default function HomeScreen() {
         </View>
 
         <View>
-          <View style={styles.highlightCard}>
-              <Image
-                source={friendsHighlight.image}
-                style={styles.highlightImage}
-                contentFit="cover"
-              />
-            <View style={styles.highlightOverlay}>
-              <ThemedText style={styles.highlightTitle} lightColor="#FFFFFF" darkColor="#FFFFFF">
-                {friendsHighlight.title}
+          <LinearGradient
+            colors={['#1BC47D', '#1CA1F2']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.pointsCard}>
+            <View style={styles.pointsHeader}>
+              <ThemedText style={styles.pointsTitle} lightColor="#FFFFFF" darkColor="#FFFFFF">
+                {currentTitle}
               </ThemedText>
-              <View style={styles.highlightAvatars}>
-                {friendsHighlight.avatars.map((uri, index) => (
-                  <Image
-                    key={uri}
-                    source={{ uri }}
-                    style={[styles.smallAvatar, { marginLeft: index === 0 ? 0 : -10 }]}
-                    contentFit="cover"
-                  />
-                ))}
+              <View style={styles.pointsBadge}>
+                <ThemedText style={styles.pointsBadgeText} lightColor="#0F172A" darkColor="#0F172A">
+                  {loadingPoints ? '...' : `${displayPoints} pts`}
+                </ThemedText>
               </View>
             </View>
-          </View>
+            <View style={styles.pointsBody}>
+              <View style={{ flex: 1, gap: 6 }}>
+                <ThemedText style={styles.pointsBalance} lightColor="#FFFFFF" darkColor="#FFFFFF">
+                  {loadingPoints ? 'Chargement...' : `${displayPoints} points`}
+                </ThemedText>
+                <ThemedText
+                  style={styles.pointsSubtitle}
+                  lightColor="rgba(255,255,255,0.9)"
+                  darkColor="rgba(255,255,255,0.9)">
+                  {levelProgress.next
+                    ? `Prochain titre : ${levelProgress.next.title} à ${levelProgress.next.min} pts`
+                    : 'Titre max atteint'}
+                </ThemedText>
+                {levelProgress.next ? (
+                  <ThemedText
+                    style={styles.pointsSubtitle}
+                    lightColor="rgba(255,255,255,0.9)"
+                    darkColor="rgba(255,255,255,0.9)">
+                    Points restants : {levelProgress.remaining}
+                  </ThemedText>
+                ) : null}
+              </View>
+              <View style={styles.ringWrapper}>
+                <View style={styles.ringBase}>
+                  <LinearGradient
+                    colors={['#FFFFFF', 'rgba(255,255,255,0.5)']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={[
+                      styles.ringFill,
+                      { transform: [{ rotate: `${Math.round(animatedLevelProgress.ratio * 360)}deg` }] },
+                    ]}
+                  />
+                  <View style={styles.ringInner}>
+                    <ThemedText style={styles.ringText} lightColor="#0F172A" darkColor="#0F172A">
+                      {Math.round(animatedLevelProgress.ratio * 100)}%
+                    </ThemedText>
+                  </View>
+                </View>
+              </View>
+            </View>
+          </LinearGradient>
         </View>
 
         <View>
@@ -498,9 +617,18 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '600',
   },
-  profileLevel: {
-    marginTop: 4,
+  greetingPrefix: {
     fontSize: 14,
+    fontWeight: '600',
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+    color: '#111827',
+  },
+  greetingName: {
+    fontSize: 26,
+    fontWeight: '800',
+    letterSpacing: -0.2,
+    color: '#0F172A',
   },
   notificationButton: {
     width: 44,
@@ -515,34 +643,89 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginBottom: 14,
   },
-  highlightCard: {
-    borderRadius: 22,
-    overflow: 'hidden',
-    height: 168,
+  pointsCard: {
+    borderRadius: 16,
+    padding: 16,
+    minHeight: 136,
+    shadowColor: '#0F172A',
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3,
   },
-  highlightImage: {
-    width: '100%',
-    height: '100%',
-  },
-  highlightOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    padding: 24,
-    justifyContent: 'space-between',
-  },
-  highlightTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-  },
-  highlightAvatars: {
+  pointsHeader: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
   },
-  smallAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
+  pointsTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    letterSpacing: 0.2,
+  },
+  pointsBadge: {
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
+  },
+  pointsBadgeText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  pointsBody: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  pointsBalance: {
+    fontSize: 30,
+    fontWeight: '800',
+    letterSpacing: -0.3,
+    lineHeight: 34,
+  },
+  pointsSubtitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    lineHeight: 18,
+  },
+  ringWrapper: {
+    width: 78,
+    height: 78,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ringBase: {
+    width: 78,
+    height: 78,
+    borderRadius: 39,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ringFill: {
+    position: 'absolute',
+    width: 78,
+    height: 78,
+    borderRadius: 39,
+    borderWidth: 8,
+    borderColor: 'rgba(255,255,255,0.9)',
+    borderLeftColor: 'transparent',
+    borderBottomColor: 'transparent',
+  },
+  ringInner: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ringText: {
+    fontSize: 16,
+    fontWeight: '800',
+    lineHeight: 20,
   },
   catchesLoader: {
     height: 160,
