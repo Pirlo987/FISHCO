@@ -1,7 +1,19 @@
 import React from 'react';
-import { ActivityIndicator, FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import {
+  ActivityIndicator,
+  FlatList,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { events } from '@/lib/events';
 
 import { supabase } from '@/lib/supabase';
@@ -16,6 +28,7 @@ type CatchRow = { species: string | null; photo_path: string | null };
 export default function ExploreScreen() {
   const router = useRouter();
   const { session } = useAuth();
+  const insets = useSafeAreaInsets();
   const listRef = React.useRef<FlatList<Species> | null>(null);
   const [search, setSearch] = React.useState('');
   const [loading, setLoading] = React.useState(true);
@@ -34,29 +47,24 @@ export default function ExploreScreen() {
 
   const SPECIES_BUCKET = process.env.EXPO_PUBLIC_SPECIES_BUCKET as string | undefined;
 
-  // Convertit une valeur d'image (URL absolue ou chemin Storage) en URL publique
+  // Convert a storage path or URL to a public URL
   const toPublicUrl = (candidate?: string | null, bucketHint?: string | null): string | undefined => {
     if (!candidate) return undefined;
     if (/^https?:\/\//i.test(candidate)) return candidate;
-    // Handle common storage path shapes (with or without leading slash):
-    // - storage/v1/object/public/<bucket>/<path>
-    // - public/<bucket>/<path>
-    // - <bucket>/<path>
     let raw = candidate.replace(/^\/+/, '');
     raw = raw.replace(/^storage\/v1\/object\/public\//i, 'public/');
     let bucket = bucketHint ?? undefined;
     let path = raw;
-    let m = /^([a-z0-9-_.]+)\/(.+)$/i.exec(raw);
+    const m = /^([a-z0-9-_.]+)\/(.+)$/i.exec(raw);
     if (m) {
       const first = m[1];
-      let rest = m[2];
+      const rest = m[2];
       if (first.toLowerCase() === 'public') {
         const m2 = /^([a-z0-9-_.]+)\/(.+)$/i.exec(rest);
         if (m2) {
           bucket = m2[1];
           path = m2[2];
         } else {
-          // 'public' with no further slash; fall back to hint/default below
           path = rest;
         }
       } else if (!bucket) {
@@ -69,13 +77,10 @@ export default function ExploreScreen() {
     return data.publicUrl ?? undefined;
   };
 
-  // URL signée (ou publique) pour photos utilisateur
   const urlFromPhotoPath = async (path?: string | null) => {
     if (!path) return null;
     try {
-      const { data, error } = await supabase.storage
-        .from('catch-photos')
-        .createSignedUrl(path, 60 * 60 * 24);
+      const { data, error } = await supabase.storage.from('catch-photos').createSignedUrl(path, 60 * 60 * 24);
       if (!error && data?.signedUrl) return data.signedUrl;
     } catch {}
     const { data } = supabase.storage.from('catch-photos').getPublicUrl(path);
@@ -107,7 +112,7 @@ export default function ExploreScreen() {
         if (!firstPathByKey[key] && row.photo_path) firstPathByKey[key] = row.photo_path;
       }
       const entries = await Promise.all(
-        Object.entries(firstPathByKey).map(async ([key, path]) => [key, await urlFromPhotoPath(path)] as const)
+        Object.entries(firstPathByKey).map(async ([key, path]) => [key, await urlFromPhotoPath(path)] as const),
       );
       for (const [k, v] of entries) photoMap[k] = v ?? null;
     }
@@ -124,7 +129,6 @@ export default function ExploreScreen() {
     setScrollTarget(null);
   }, [session?.user?.id]);
 
-  // Ne plus rafraîchir sur focus; on écoute seulement les ajouts de prises
   React.useEffect(() => {
     const off = events.on('catch:added', (payload) => {
       const { species, normalized, target } = payload;
@@ -154,21 +158,17 @@ export default function ExploreScreen() {
   }, [fetchDiscovered, router, setSearch, setDiscoveredFilter, setOnlyDbImage, setOnlyUserPhoto]);
 
   const [speciesList, setSpeciesList] = React.useState<Species[]>([]);
-  // Variables conservées pour compat avec onEndReached (désactivé logiquement)
   const PAGE_SIZE = 60;
   const [pageIndex, setPageIndex] = React.useState(0);
   const [hasMore, setHasMore] = React.useState(false);
   const [loadingPage, setLoadingPage] = React.useState(false);
   const fetchSpeciesPage = React.useCallback((_page: number) => {}, []);
 
-  // Charger TOUTES les espèces (une fois), puis on affichera uniquement les découvertes
   React.useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const { data, error } = await supabase
-          .from('species')
-          .select('*');
+        const { data, error } = await supabase.from('species').select('*');
         if (!error && Array.isArray(data)) {
           const mapped: Species[] = (data as any[])
             .map((r) => {
@@ -184,12 +184,11 @@ export default function ExploreScreen() {
                 '';
               const image = toPublicUrl(
                 r.image_url ?? r.url ?? r.image ?? r.photo_url ?? r.image_path ?? r.url_path ?? r.path ?? null,
-                r.image_bucket ?? r.url_bucket ?? r.photo_bucket ?? r.bucket ?? null
+                r.image_bucket ?? r.url_bucket ?? r.photo_bucket ?? r.bucket ?? null,
               );
               return { name, image } as Species;
             })
             .filter((s) => s.name);
-          // Deduplicate by normalized name to avoid duplicate keys
           const byKey = new Map<string, Species>();
           for (const s of mapped) {
             const key = normalizeName(s.name);
@@ -203,7 +202,6 @@ export default function ExploreScreen() {
       try {
         const json = require('@/assets/data/species.json') as Species[];
         if (json && Array.isArray(json)) {
-          // Merge local JSON images into full list, not limit to JSON
           const byKey = new Map<string, Species>();
           for (const s of FISH_SPECIES) byKey.set(normalizeName(s.name), { ...s });
           for (const extra of json) {
@@ -220,7 +218,9 @@ export default function ExploreScreen() {
       if (!cancelled) setSpeciesList(FISH_SPECIES);
       if (!cancelled) setLoading(false);
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const filtered = React.useMemo(() => {
@@ -272,83 +272,145 @@ export default function ExploreScreen() {
     [rowHeight],
   );
 
+  const discoveredCount = discovered.size;
+  const totalCount = speciesList.length;
+
   return (
     <ThemedSafeArea>
-    <ThemedView style={{ flex: 1 }}>
-      <View style={styles.header}>
-        <ThemedText type="title">Explorer</ThemedText>
-        <TextInput
-          placeholder="Rechercher une espèce..."
-          value={search}
-          onChangeText={setSearch}
-          style={styles.search}
-          placeholderTextColor="#888"
-        />
-        <View style={styles.filtersRowWrapper}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filtersRow}>
+      <ThemedView style={{ flex: 1 }}>
+        <View style={[styles.header]}>
+          <View style={styles.titleRow}>
+            <View style={styles.titleBlock}>
+              <ThemedText style={styles.title}>Explorer</ThemedText>
+              <ThemedText style={styles.subtitle}>Deviens le meilleur pecheur</ThemedText>
+            </View>
+            <View style={styles.statsBox}>
+              <ThemedText style={styles.statsText}>
+                {discoveredCount}/{totalCount}
+              </ThemedText>
+            </View>
+          </View>
+
+          <View style={styles.searchContainer}>
+            <Ionicons name="search-outline" size={20} color="#94A3B8" style={styles.searchIcon} />
+            <TextInput
+              placeholder="Rechercher une espece..."
+              value={search}
+              onChangeText={setSearch}
+              style={styles.searchInput}
+              placeholderTextColor="#94A3B8"
+            />
+            {search.length > 0 && (
+              <Pressable onPress={() => setSearch('')} style={styles.clearButton}>
+                <Ionicons name="close-circle" size={20} color="#94A3B8" />
+              </Pressable>
+            )}
+          </View>
+
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filtersRow}
+          >
             <Pressable
               onPress={() => setDiscoveredFilter((v) => (v === 'discovered' ? 'all' : 'discovered'))}
               style={[styles.chip, discoveredFilter === 'discovered' && styles.chipActive]}
             >
-              <Text style={[styles.chipText, discoveredFilter === 'discovered' && styles.chipTextActive]}>Découverts</Text>
+              <Ionicons
+                name={discoveredFilter === 'discovered' ? 'checkmark-circle' : 'checkmark-circle-outline'}
+                size={16}
+                color={discoveredFilter === 'discovered' ? '#FFFFFF' : '#64748B'}
+              />
+              <Text style={[styles.chipText, discoveredFilter === 'discovered' && styles.chipTextActive]}>
+                Decouverts
+              </Text>
             </Pressable>
+
             <Pressable
               onPress={() => setDiscoveredFilter((v) => (v === 'undiscovered' ? 'all' : 'undiscovered'))}
               style={[styles.chip, discoveredFilter === 'undiscovered' && styles.chipActive]}
             >
-              <Text style={[styles.chipText, discoveredFilter === 'undiscovered' && styles.chipTextActive]}>À découvrir</Text>
+              <Ionicons
+                name={discoveredFilter === 'undiscovered' ? 'help-circle' : 'help-circle-outline'}
+                size={16}
+                color={discoveredFilter === 'undiscovered' ? '#FFFFFF' : '#64748B'}
+              />
+              <Text style={[styles.chipText, discoveredFilter === 'undiscovered' && styles.chipTextActive]}>
+                A decouvrir
+              </Text>
             </Pressable>
-            <Pressable onPress={() => setOnlyDbImage((v) => !v)} style={[styles.chip, onlyDbImage && styles.chipActive]}>
+
+            <Pressable
+              onPress={() => setOnlyDbImage((v) => !v)}
+              style={[styles.chip, onlyDbImage && styles.chipActive]}
+            >
+              <Ionicons
+                name={onlyDbImage ? 'image' : 'image-outline'}
+                size={16}
+                color={onlyDbImage ? '#FFFFFF' : '#64748B'}
+              />
               <Text style={[styles.chipText, onlyDbImage && styles.chipTextActive]}>Avec image</Text>
             </Pressable>
-            <Pressable onPress={() => setOnlyUserPhoto((v) => !v)} style={[styles.chip, onlyUserPhoto && styles.chipActive]}>
+
+            <Pressable
+              onPress={() => setOnlyUserPhoto((v) => !v)}
+              style={[styles.chip, onlyUserPhoto && styles.chipActive]}
+            >
+              <Ionicons
+                name={onlyUserPhoto ? 'camera' : 'camera-outline'}
+                size={16}
+                color={onlyUserPhoto ? '#FFFFFF' : '#64748B'}
+              />
               <Text style={[styles.chipText, onlyUserPhoto && styles.chipTextActive]}>Avec photo</Text>
             </Pressable>
           </ScrollView>
         </View>
-      </View>
 
-      {loading ? (
-        <View style={styles.center}> 
-          <ActivityIndicator />
-        </View>
-      ) : (
-        <FlatList
-          ref={listRef}
-          style={{ flex: 1 }}
-          contentContainerStyle={{ padding: padding, paddingBottom: 24 }}
-          data={filtered}
-          keyExtractor={(item) => item.name}
-          numColumns={3}
-          columnWrapperStyle={{ gap }}
-          onEndReached={() => {}}
-          getItemLayout={getItemLayout}
-          onScrollToIndexFailed={onScrollToIndexFailed}
-          renderItem={({ item }) => {
-            const key = normalizeName(item.name);
-            const isDiscovered = discovered.has(key);
-            // Show DB species image even before discovery (dimmed). After discovery, still prefer DB image,
-            // and fallback to user's first catch photo if DB image missing.
-            const userPhoto = photoBySpecies[key] ?? null;
-            const uri = item.image ?? (isDiscovered ? userPhoto ?? null : null);
-            return (
-              <SpeciesTile
-                item={item}
-                tileWidth={tileW}
-                isDiscovered={isDiscovered}
-                onPress={() => router.push({ pathname: '/species/[slug]', params: { slug: key, name: item.name } })}
-                imageUri={uri}
-              />
-            );
-          }}
-          ListEmptyComponent={() => (
-            <View style={[styles.center, { paddingTop: 40 }]}>
-              <ThemedText>Aucune espèce</ThemedText>
-            </View>
-          )}
-        />
-      )}
-    </ThemedView>
+        {loading ? (
+          <View style={styles.center}>
+            <ActivityIndicator size="large" color="#3B82F6" />
+          </View>
+        ) : (
+          <FlatList
+            ref={listRef}
+            style={{ flex: 1 }}
+            contentContainerStyle={{ padding: padding, paddingBottom: 24 }}
+            data={filtered}
+            keyExtractor={(item) => item.name}
+            numColumns={3}
+            columnWrapperStyle={{ gap }}
+            onEndReached={() => {}}
+            getItemLayout={getItemLayout}
+            onScrollToIndexFailed={onScrollToIndexFailed}
+            renderItem={({ item }) => {
+              const key = normalizeName(item.name);
+              const isDiscovered = discovered.has(key);
+              const userPhoto = photoBySpecies[key] ?? null;
+              const uri = item.image ?? (isDiscovered ? userPhoto ?? null : null);
+              return (
+                <SpeciesTile
+                  item={item}
+                  tileWidth={tileW}
+                  isDiscovered={isDiscovered}
+                  onPress={() =>
+                    router.push({ pathname: '/species/[slug]', params: { slug: key, name: item.name } })
+                  }
+                  imageUri={uri}
+                />
+              );
+            }}
+            ListEmptyComponent={() => (
+              <View style={[styles.center, { paddingTop: 60 }]}>
+                <View style={styles.emptyIconCircle}>
+                  <Ionicons name="fish-outline" size={48} color="#94A3B8" />
+                </View>
+                <ThemedText style={styles.emptyText}>Aucune espece trouvee</ThemedText>
+                <ThemedText style={styles.emptySubtext}>Essayez de modifier vos filtres</ThemedText>
+              </View>
+            )}
+          />
+        )}
+      </ThemedView>
     </ThemedSafeArea>
   );
 }
@@ -369,7 +431,13 @@ const SpeciesTile = React.memo(function SpeciesTile({
   imageUri,
 }: SpeciesTileProps) {
   return (
-    <Pressable onPress={onPress} style={{ width: tileWidth, marginBottom: 12 }}>
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        { width: tileWidth, marginBottom: 12 },
+        { opacity: pressed ? 0.7 : 1 },
+      ]}
+    >
       <View
         style={[
           styles.tile,
@@ -378,13 +446,23 @@ const SpeciesTile = React.memo(function SpeciesTile({
         ]}
       >
         {imageUri ? (
-          <Image source={{ uri: imageUri }} style={styles.tileImage} contentFit="cover" />
+          <>
+            <Image source={{ uri: imageUri }} style={styles.tileImage} contentFit="cover" />
+            {!isDiscovered && <View style={styles.tileOverlay} />}
+          </>
         ) : (
           <View style={styles.tilePlaceholder}>
-            <Text style={styles.tileEmoji}>🐟</Text>
+            <Ionicons name="fish-outline" size={36} color={isDiscovered ? '#94A3B8' : '#CBD5E1'} />
+          </View>
+        )}
+
+        {isDiscovered && (
+          <View style={styles.discoveredBadge}>
+            <Ionicons name="checkmark-circle" size={18} color="#10B981" />
           </View>
         )}
       </View>
+
       <Text style={[styles.tileLabel, !isDiscovered && styles.tileLabelDim]} numberOfLines={1}>
         {isDiscovered ? item.name : '???'}
       </Text>
@@ -393,44 +471,174 @@ const SpeciesTile = React.memo(function SpeciesTile({
 });
 
 const styles = StyleSheet.create({
-  header: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8, gap: 10 },
-  search: {
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: '#fff',
+  header: {
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    gap: 12,
+    backgroundColor: '#F8FAFC',
   },
-  filtersRowWrapper: { marginTop: 2 },
-  filtersRow: { paddingVertical: 4, gap: 8, paddingRight: 8 },
-  chip: {
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  titleBlock: {
+    flex: 1,
+    gap: 4,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#0F172A',
+    lineHeight: 34,
+  },
+  subtitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#475569',
+  },
+  statsBox: {
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 12,
     paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 999,
-    backgroundColor: '#f1f1f1',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  statsText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#3B82F6',
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  searchIcon: {
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '500',
+    color: '#0F172A',
+  },
+  clearButton: {
+    padding: 4,
+  },
+  filtersRow: {
+    paddingVertical: 6,
+    gap: 8,
+    paddingRight: 6,
+  },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
     marginRight: 8,
   },
   chipActive: {
-    backgroundColor: '#1e90ff',
+    backgroundColor: '#3B82F6',
+    borderColor: '#3B82F6',
   },
-  chipText: { color: '#333', fontWeight: '600' },
-  chipTextActive: { color: '#fff' },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  tile: {
-    borderRadius: 10,
-    backgroundColor: '#f1f1f1',
-    overflow: 'hidden',
+  chipText: {
+    color: '#64748B',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  chipTextActive: {
+    color: '#FFFFFF',
+  },
+  center: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  tileUndiscovered: {
-    backgroundColor: '#e9e9e9',
-    opacity: 0.45,
+  emptyIconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#E2E8F0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
   },
-  tileImage: { width: '100%', height: '100%' },
-  tilePlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  tileEmoji: { fontSize: 28 },
-  tileLabel: { marginTop: 6, textAlign: 'center', fontWeight: '600' },
-  tileLabelDim: { color: '#888', fontWeight: '500' },
+  emptyText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: '#475569',
+    marginTop: 4,
+  },
+  tile: {
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  tileUndiscovered: {
+    backgroundColor: '#F8FAFC',
+    borderColor: '#E2E8F0',
+  },
+  tileImage: {
+    width: '100%',
+    height: '100%',
+  },
+  tileOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(248, 250, 252, 0.7)',
+  },
+  tilePlaceholder: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F8FAFC',
+  },
+  discoveredBadge: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 4,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
+  },
+  tileLabel: {
+    marginTop: 8,
+    textAlign: 'center',
+    fontWeight: '600',
+    fontSize: 13,
+    color: '#0F172A',
+  },
+  tileLabelDim: {
+    color: '#94A3B8',
+    fontWeight: '500',
+  },
 });
