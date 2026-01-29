@@ -10,6 +10,7 @@ import React from 'react';
 
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { AuthProvider, useAuth } from '@/providers/AuthProvider';
+import { supabase } from '@/lib/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Keep the splash screen visible until we finish loading critical app state.
@@ -32,6 +33,7 @@ function AuthGate({
   const [hasSeenOnboarding, setHasSeenOnboarding] = React.useState<boolean | null>(null);
   const [profilePending, setProfilePending] = React.useState<boolean | null>(null);
   const [profileDone, setProfileDone] = React.useState<boolean | null>(null);
+  const profileCheckRun = React.useRef(false);
   const hasSignaledReady = React.useRef(false);
 
   // Re-check onboarding flag when navigation segments change so we don't loop back
@@ -46,9 +48,18 @@ function AuthGate({
     ])
       .then(([seen, pending, done]) => {
         if (mounted) {
-          setHasSeenOnboarding(!!seen);
-          setProfilePending(!!pending);
-          setProfileDone(!!done);
+          const normalize = (val: string | null) => {
+            if (val === '1' || val === 'true') return true;
+            if (val === '0' || val === 'false') return false;
+            return null;
+          };
+          const seenFlag = normalize(seen);
+          const pendingFlag = normalize(pending);
+          const doneFlag = normalize(done);
+          // If no session, fall back to false to avoid blocking the splash/ready state
+          setHasSeenOnboarding(session ? seenFlag : seenFlag ?? false);
+          setProfilePending(session ? pendingFlag : pendingFlag ?? false);
+          setProfileDone(session ? doneFlag : doneFlag ?? false);
         }
       })
       .finally(() => {
@@ -57,7 +68,7 @@ function AuthGate({
     return () => {
       mounted = false;
     };
-  }, [segments]);
+  }, [segments, session]);
 
   // Notify root layout once auth state and onboarding flags are ready so the splash
   // screen can be dismissed.
@@ -68,6 +79,54 @@ function AuthGate({
     hasSignaledReady.current = true;
     onReady?.();
   }, [initialized, onboardingChecked, hasSeenOnboarding, profilePending, profileDone, onReady]);
+
+  React.useEffect(() => {
+    if (!session?.user?.id) return;
+    if (!onboardingChecked) return;
+    if (profileCheckRun.current) return;
+    const needsProfileCheck =
+      hasSeenOnboarding === null ||
+      profilePending === null ||
+      profileDone === null ||
+      (profileDone === false && profilePending === false);
+    if (!needsProfileCheck) return;
+
+    let cancelled = false;
+    const hydrateFromProfile = async () => {
+      try {
+        profileCheckRun.current = true;
+        const { data } = await supabase.from('profiles').select('id').eq('id', session.user.id).maybeSingle();
+        if (cancelled) return;
+        const exists = !!data;
+        if (exists) {
+          setHasSeenOnboarding(true);
+          setProfileDone(true);
+          setProfilePending(false);
+          await Promise.all([
+            AsyncStorage.setItem('onboarding_seen', '1'),
+            AsyncStorage.setItem('profile_onboarding_done', '1'),
+            AsyncStorage.removeItem('profile_onboarding_pending'),
+          ]);
+        } else {
+          setProfilePending(true);
+          setProfileDone(false);
+        }
+      } catch {
+        if (cancelled) return;
+        setHasSeenOnboarding((prev) => (prev === null ? false : prev));
+        setProfilePending((prev) => (prev === null ? false : prev));
+        setProfileDone((prev) => (prev === null ? false : prev));
+      }
+    };
+    hydrateFromProfile();
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.user?.id, onboardingChecked, hasSeenOnboarding, profilePending, profileDone]);
+
+  React.useEffect(() => {
+    profileCheckRun.current = false;
+  }, [session?.user?.id]);
 
   React.useEffect(() => {
     if (!initialized || !onboardingChecked || hasSeenOnboarding === null || profilePending === null || profileDone === null) return;
@@ -81,7 +140,7 @@ function AuthGate({
     );
 
     // New session on an auth screen and onboarding not yet seen => jump straight to profile flow
-    if (session && inAuthGroup && !hasSeenOnboarding) {
+    if (session && inAuthGroup && !hasSeenOnboarding && profilePending) {
       router.replace('/(onboarding)/name');
       return;
     }

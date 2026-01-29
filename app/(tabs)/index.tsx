@@ -15,6 +15,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import * as Location from 'expo-location';
+import { BlurView } from 'expo-blur';
 
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
@@ -52,16 +53,6 @@ type ProfileRow = {
 
 type PointsRow = {
   points: number;
-};
-
-const friendsHighlight = {
-  title: 'Fishing Group',
-  image: require('@/assets/images/fond-ecran-accueil.jpg'),
-  avatars: [
-    'https://images.unsplash.com/photo-1525130413817-d45c1d127c42?auto=format&fit=crop&w=120&q=60',
-    'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?auto=format&fit=crop&w=120&q=60',
-    'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=120&q=60',
-  ],
 };
 
 const formatNumber = (value: number | null | undefined) => {
@@ -118,6 +109,7 @@ export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { session } = useAuth();
+
   const [recentCatches, setRecentCatches] = React.useState<CatchSummary[]>([]);
   const [loadingCatches, setLoadingCatches] = React.useState(false);
   const [weather, setWeather] = React.useState<WeatherSnapshot | null>(null);
@@ -125,10 +117,11 @@ export default function HomeScreen() {
   const [weatherError, setWeatherError] = React.useState<string | null>(null);
   const [profile, setProfile] = React.useState<ProfileRow | null>(null);
   const [profileAvatarUrl, setProfileAvatarUrl] = React.useState<string | null>(null);
-  const [points, setPoints] = React.useState<number>(0);
+  const [points, setPoints] = React.useState(0);
   const [loadingPoints, setLoadingPoints] = React.useState(false);
+
   const animatedPoints = React.useRef(new Animated.Value(0)).current;
-  const [displayPoints, setDisplayPoints] = React.useState<number>(0);
+  const [displayPoints, setDisplayPoints] = React.useState(0);
 
   const degreeSymbol = String.fromCharCode(176);
   const formatTemperature = React.useCallback(
@@ -141,7 +134,6 @@ export default function HomeScreen() {
 
   React.useEffect(() => {
     let cancelled = false;
-
     const fetchCatches = async () => {
       if (!session?.user?.id) {
         if (!cancelled) setRecentCatches([]);
@@ -166,10 +158,8 @@ export default function HomeScreen() {
         if (!cancelled) setLoadingCatches(false);
       }
     };
-
     fetchCatches();
     const off = events.on('catch:added', fetchCatches);
-
     return () => {
       cancelled = true;
       off();
@@ -178,18 +168,18 @@ export default function HomeScreen() {
 
   React.useEffect(() => {
     let cancelled = false;
-
     const loadWeather = async () => {
       setWeatherError(null);
       setLoadingWeather(true);
       try {
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (status !== Location.PermissionStatus.GRANTED) {
-          if (!cancelled) setWeatherError('Autorise la localisation pour afficher la meteo.');
+          if (!cancelled) setWeatherError('Autorise la localisation pour afficher la météo.');
           return;
         }
-
-        const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        const position = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
         const { latitude, longitude } = position.coords;
 
         let label = 'Autour de toi';
@@ -214,35 +204,31 @@ export default function HomeScreen() {
         });
         const response = await fetch(`https://api.open-meteo.com/v1/forecast?${params.toString()}`);
         if (!response.ok) throw new Error(`Weather request failed: ${response.status}`);
+
         const json = await response.json();
         const current = json?.current ?? {};
         const temperature = typeof current.temperature_2m === 'number' ? current.temperature_2m : null;
-        const apparentTemperature = typeof current.apparent_temperature === 'number' ? current.apparent_temperature : null;
-        const humidity = typeof current.relative_humidity_2m === 'number' ? current.relative_humidity_2m : null;
-        const visibilityKm = typeof current.visibility === 'number' ? current.visibility / 1000 : null;
+        const apparentTemperature =
+          typeof current.apparent_temperature === 'number' ? current.apparent_temperature : null;
+        const humidity =
+          typeof current.relative_humidity_2m === 'number' ? current.relative_humidity_2m : null;
+        const visibilityKm =
+          typeof current.visibility === 'number' ? current.visibility / 1000 : null;
 
         if (!cancelled) {
-          setWeather({
-            label,
-            temperature,
-            apparentTemperature,
-            humidity,
-            visibilityKm,
-          });
+          setWeather({ label, temperature, apparentTemperature, humidity, visibilityKm });
         }
       } catch (error) {
         if (!cancelled) {
           console.warn('HomeScreen: unable to load weather', error);
           setWeather(null);
-          setWeatherError('Meteo indisponible pour le moment.');
+          setWeatherError('Météo indisponible pour le moment.');
         }
       } finally {
         if (!cancelled) setLoadingWeather(false);
       }
     };
-
     loadWeather();
-
     return () => {
       cancelled = true;
     };
@@ -250,23 +236,19 @@ export default function HomeScreen() {
 
   React.useEffect(() => {
     let cancelled = false;
-
     const loadProfile = async () => {
       if (!session?.user?.id) {
         if (!cancelled) setProfileAvatarUrl(null);
         if (!cancelled) setProfile(null);
         return;
       }
-
       try {
         const { data, error } = await supabase
           .from('profiles')
           .select('first_name,last_name,username,avatar_url,avatar_path,photo_url,photo_path')
           .eq('id', session.user.id)
           .maybeSingle();
-
         if (error) throw error;
-
         const profileRow = (data as ProfileRow | null) ?? null;
         const resolved = avatarUrlFromProfile(profileRow);
         if (!cancelled) {
@@ -281,9 +263,7 @@ export default function HomeScreen() {
         }
       }
     };
-
     loadProfile();
-
     return () => {
       cancelled = true;
     };
@@ -346,7 +326,6 @@ export default function HomeScreen() {
     }, [loadPoints])
   );
 
-  // Animate displayed points whenever the absolute value changes
   React.useEffect(() => {
     const id = animatedPoints.addListener(({ value }) => {
       setDisplayPoints(Math.round(value));
@@ -367,201 +346,274 @@ export default function HomeScreen() {
     router.push('/profile');
   }, [router]);
 
+  const handleCatchPress = React.useCallback((catchId: string) => {
+    router.push(`/catches/${catchId}`);
+  }, [router]);
+
   return (
-    <ThemedView style={styles.root}>
-      <ScrollView
-        contentContainerStyle={[
-          styles.content,
-          { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 48 },
-        ]}
-        showsVerticalScrollIndicator={false}>
+    <ThemedView style={[styles.root, { paddingTop: insets.top + 16 }]}>
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        {/* Header */}
         <View style={styles.header}>
-          <View style={styles.profileBlock}>
-            <Pressable
-              onPress={handleProfilePress}
-              hitSlop={12}
-              accessibilityRole="button"
-              accessibilityLabel="Ouvrir votre profil"
-              accessibilityHint="Affiche les informations de votre compte"
-              style={({ pressed }) => [{ opacity: pressed ? 0.65 : 1 }]}>
-              {profileAvatarUrl ? (
-                <Image source={{ uri: profileAvatarUrl }} style={styles.avatar} contentFit="cover" />
-              ) : (
-                <View style={[styles.avatar, styles.avatarPlaceholder]}>
-                  <ThemedText
-                    style={styles.avatarInitials}
-                    lightColor="#1F1F1F"
-                    darkColor="#F2F4F7">
-                    {profileInitials}
-                  </ThemedText>
-                </View>
-              )}
-            </Pressable>
+          <Pressable
+            onPress={handleProfilePress}
+            style={({ pressed }) => [styles.profileBlock, { opacity: pressed ? 0.7 : 1 }]}
+          >
+            {profileAvatarUrl ? (
+              <Image source={{ uri: profileAvatarUrl }} style={styles.avatar} contentFit="cover" />
+            ) : (
+              <LinearGradient
+                colors={['#3B82F6', '#1D4ED8']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={[styles.avatar, styles.avatarPlaceholder]}
+              >
+                <ThemedText style={styles.avatarInitials}>{profileInitials}</ThemedText>
+              </LinearGradient>
+            )}
             <View>
-              <ThemedText style={styles.greetingPrefix}>Hello,</ThemedText>
-              <ThemedText style={styles.greetingName}>{greetingName?.toUpperCase()}</ThemedText>
+              <ThemedText style={styles.greetingPrefix}>Bonjour</ThemedText>
+              <ThemedText style={styles.greetingName}>{greetingName}</ThemedText>
             </View>
-          </View>
-          <Pressable style={styles.notificationButton} accessibilityRole="button">
-            <Ionicons name="notifications-outline" size={22} color="#1F1F1F" />
+          </Pressable>
+
+          <Pressable
+            style={({ pressed }) => [styles.notificationButton, { opacity: pressed ? 0.6 : 1 }]}
+          >
+            <Ionicons name="notifications-outline" size={22} color="#64748B" />
           </Pressable>
         </View>
 
-        <View>
-          <LinearGradient
-            colors={['#1BC47D', '#1CA1F2']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.pointsCard}>
-            <View style={styles.pointsHeader}>
-              <ThemedText style={styles.pointsTitle} lightColor="#FFFFFF" darkColor="#FFFFFF">
-                {currentTitle}
+        {/* Points Card - Gradient Bleu/Cyan Vif */}
+        <LinearGradient
+          colors={['#3B82F6', '#06B6D4', '#0EA5E9']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1.2, y: 1.2 }}
+          style={styles.pointsCard}
+        >
+          {/* Effet de lumière */}
+          <View style={styles.cardGlow} />
+          
+          <View style={styles.pointsHeader}>
+            <View style={styles.pointsInfo}>
+              <ThemedText style={styles.pointsTitle}>{currentTitle}</ThemedText>
+              <ThemedText style={styles.pointsSubtitle}>
+                {loadingPoints ? 'Chargement...' : `${displayPoints} points`}
               </ThemedText>
-              <View style={styles.pointsBadge}>
-                <ThemedText style={styles.pointsBadgeText} lightColor="#0F172A" darkColor="#0F172A">
-                  {loadingPoints ? '...' : `${displayPoints} pts`}
-                </ThemedText>
-              </View>
             </View>
-            <View style={styles.pointsBody}>
-              <View style={{ flex: 1, gap: 6 }}>
-                <ThemedText style={styles.pointsBalance} lightColor="#FFFFFF" darkColor="#FFFFFF">
-                  {loadingPoints ? 'Chargement...' : `${displayPoints} points`}
-                </ThemedText>
-                <ThemedText
-                  style={styles.pointsSubtitle}
-                  lightColor="rgba(255,255,255,0.9)"
-                  darkColor="rgba(255,255,255,0.9)">
-                  {levelProgress.next
-                    ? `Prochain titre : ${levelProgress.next.title} à ${levelProgress.next.min} pts`
-                    : 'Titre max atteint'}
-                </ThemedText>
-                {levelProgress.next ? (
-                  <ThemedText
-                    style={styles.pointsSubtitle}
-                    lightColor="rgba(255,255,255,0.9)"
-                    darkColor="rgba(255,255,255,0.9)">
-                    Points restants : {levelProgress.remaining}
+
+            <View style={styles.ringWrapper}>
+              <View style={styles.ringBase}>
+                <Animated.View
+                  style={[
+                    styles.ringFill,
+                    {
+                      transform: [
+                        {
+                          rotate: animatedPoints.interpolate({
+                            inputRange: [0, levelProgress.next?.min ?? points],
+                            outputRange: ['0deg', '360deg'],
+                          }),
+                        },
+                      ],
+                    },
+                  ]}
+                />
+                <View style={styles.ringInner}>
+                  <ThemedText style={styles.ringText}>
+                    {Math.round(animatedLevelProgress.ratio * 100)}%
                   </ThemedText>
-                ) : null}
-              </View>
-              <View style={styles.ringWrapper}>
-                <View style={styles.ringBase}>
-                  <LinearGradient
-                    colors={['#FFFFFF', 'rgba(255,255,255,0.5)']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={[
-                      styles.ringFill,
-                      { transform: [{ rotate: `${Math.round(animatedLevelProgress.ratio * 360)}deg` }] },
-                    ]}
-                  />
-                  <View style={styles.ringInner}>
-                    <ThemedText style={styles.ringText} lightColor="#0F172A" darkColor="#0F172A">
-                      {Math.round(animatedLevelProgress.ratio * 100)}%
-                    </ThemedText>
-                  </View>
                 </View>
               </View>
             </View>
-          </LinearGradient>
-        </View>
+          </View>
 
-        <View>
-          <ThemedText style={styles.sectionTitle}>Last Catches</ThemedText>
+          <View style={styles.pointsProgress}>
+            <View style={styles.progressBarBg}>
+              <Animated.View
+                style={[
+                  styles.progressBarFill,
+                  {
+                    width: animatedPoints.interpolate({
+                      inputRange: [
+                        levelProgress.current.min,
+                        levelProgress.next?.min ?? levelProgress.current.min + 1,
+                      ],
+                      outputRange: ['0%', '100%'],
+                    }),
+                  },
+                ]}
+              />
+            </View>
+            {levelProgress.next ? (
+              <ThemedText style={styles.progressLabel}>
+                Prochain niveau : {levelProgress.next.title} · +{levelProgress.remaining} pts
+              </ThemedText>
+            ) : (
+              <ThemedText style={styles.progressLabel}>Niveau maximum atteint</ThemedText>
+            )}
+          </View>
+        </LinearGradient>
+
+        {/* Recent Catches */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <ThemedText style={styles.sectionTitle}>Dernières prises</ThemedText>
+            <View style={styles.sectionBadge}>
+              <ThemedText style={styles.sectionBadgeText}>{recentCatches.length}</ThemedText>
+            </View>
+          </View>
+          
           {loadingCatches ? (
             <View style={styles.catchesLoader}>
-              <ActivityIndicator />
+              <ActivityIndicator size="large" color="#3B82F6" />
             </View>
           ) : recentCatches.length === 0 ? (
-            <ThemedText style={styles.emptyState} lightColor="#8E8E93" darkColor="#B0B0B5">
-              Aucune prise pour le moment.
-            </ThemedText>
+            <View style={styles.emptyCard}>
+              <View style={styles.emptyIconCircle}>
+                <Ionicons name="fish-outline" size={40} color="#94A3B8" />
+              </View>
+              <ThemedText style={styles.emptyText}>Aucune prise enregistrée</ThemedText>
+              <ThemedText style={styles.emptySubtext}>
+                Commencez votre aventure
+              </ThemedText>
+            </View>
           ) : (
-            <ScrollView
-              horizontal
-              contentContainerStyle={styles.catchesList}
-              showsHorizontalScrollIndicator={false}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.catchesList}>
               {recentCatches.map((item) => {
                 const photoUrl = urlFromCatchPhoto(item.photo_path);
                 const weightLabel = formatNumber(item.weight_kg);
                 const lengthLabel = formatNumber(item.length_cm);
                 const caughtDate = formatDate(item.caught_at);
+
                 return (
-                  <View key={item.id} style={styles.catchCard}>
+                  <Pressable 
+                    key={item.id} 
+                    style={({ pressed }) => [
+                      styles.catchCard,
+                      { opacity: pressed ? 0.9 : 1 }
+                    ]}
+                    onPress={() => handleCatchPress(item.id)}
+                  >
                     {photoUrl ? (
-                      <Image source={{ uri: photoUrl }} style={styles.catchImage} contentFit="cover" />
+                      <Image
+                        source={{ uri: photoUrl }}
+                        style={styles.catchImage}
+                        contentFit="cover"
+                      />
                     ) : (
-                      <View style={[styles.catchImage, styles.catchImageFallback]} />
+                      <LinearGradient
+                        colors={['#3B82F6', '#1D4ED8']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={[styles.catchImage, styles.catchImageFallback]}
+                      >
+                        <Ionicons name="fish" size={56} color="rgba(255,255,255,0.4)" />
+                      </LinearGradient>
                     )}
-                    <View style={styles.catchBody}>
-                      <ThemedText style={styles.catchTitle} numberOfLines={1}>
-                        {item.species ?? 'Prise inconnue'}
-                      </ThemedText>
-                      <ThemedText style={styles.catchMeta} numberOfLines={1} lightColor="#6E6E73" darkColor="#B0B0B5">
-                        {lengthLabel ? `Taille ${lengthLabel} cm` : 'Taille inconnue'}
-                        {weightLabel ? ` - Poids ${weightLabel} kg` : ''}
-                      </ThemedText>
-                      {caughtDate ? (
-                        <ThemedText style={styles.catchMeta} numberOfLines={1} lightColor="#6E6E73" darkColor="#B0B0B5">
-                          {caughtDate}
-                        </ThemedText>
-                      ) : null}
-                    </View>
-                  </View>
+                    
+                    {/* Overlay avec flou */}
+                    <LinearGradient
+                      colors={['transparent', 'rgba(0,0,0,0.3)', 'rgba(0,0,0,0.7)']}
+                      style={styles.catchOverlay}
+                    >
+                      <BlurView intensity={20} tint="dark" style={styles.catchInfoBlur}>
+                        <View style={styles.catchInfo}>
+                          <ThemedText style={styles.catchSpecies}>
+                            {item.species ?? 'Espèce inconnue'}
+                          </ThemedText>
+                          <View style={styles.catchMeasures}>
+                            {lengthLabel && (
+                              <View style={styles.measureItem}>
+                                <Ionicons name="resize-outline" size={14} color="rgba(255,255,255,0.9)" />
+                                <ThemedText style={styles.measureText}>{lengthLabel} cm</ThemedText>
+                              </View>
+                            )}
+                            {weightLabel && (
+                              <View style={styles.measureItem}>
+                                <Ionicons name="barbell-outline" size={14} color="rgba(255,255,255,0.9)" />
+                                <ThemedText style={styles.measureText}>{weightLabel} kg</ThemedText>
+                              </View>
+                            )}
+                          </View>
+                          {caughtDate && (
+                            <View style={styles.catchDateBadge}>
+                              <Ionicons name="calendar-outline" size={12} color="rgba(255,255,255,0.8)" />
+                              <ThemedText style={styles.catchDate}>{caughtDate}</ThemedText>
+                            </View>
+                          )}
+                        </View>
+                      </BlurView>
+                    </LinearGradient>
+                  </Pressable>
                 );
               })}
             </ScrollView>
           )}
         </View>
 
-        <View>
-          <ThemedText style={styles.sectionTitle}>Forecast</ThemedText>
+        {/* Weather Forecast - Pimpé mais simple */}
+        <View style={styles.section}>
+          <ThemedText style={styles.sectionTitle}>Météo</ThemedText>
           <LinearGradient
-            colors={['#8FD1FF', '#FFC6A5']}
+            colors={['#EFF6FF', '#DBEAFE']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
-            style={styles.forecastCard}>
+            style={styles.forecastCard}
+          >
             <View style={styles.forecastHeader}>
               <View style={styles.forecastLocation}>
-                <Ionicons name="location-outline" size={14} color="rgba(255,255,255,0.9)" />
-                <ThemedText style={styles.forecastLocationText} lightColor="#FFFFFF" darkColor="#FFFFFF">
-                  {weather?.label ?? 'Autour de toi'}
+                <Ionicons name="location-outline" size={14} color="#3B82F6" />
+                <ThemedText style={styles.forecastLocationText}>
+                  {weather?.label ?? 'Localisation'}
                 </ThemedText>
               </View>
               {loadingWeather ? (
-                <ActivityIndicator color="#FFFFFF" />
+                <ActivityIndicator size="small" color="#3B82F6" />
               ) : (
-                <Ionicons name="sunny-outline" size={20} color="rgba(255,255,255,0.9)" />
+                <View style={styles.weatherIconCircle}>
+                  <Ionicons name="partly-sunny" size={32} color="#3B82F6" />
+                </View>
               )}
             </View>
+
             {loadingWeather && !weather ? (
               <View style={styles.forecastLoading}>
-                <ActivityIndicator color="#FFFFFF" />
+                <ActivityIndicator size="large" color="#3B82F6" />
               </View>
             ) : weather ? (
               <>
-                <ThemedText style={styles.temperature} lightColor="#FFFFFF" darkColor="#FFFFFF">
-                  {formatTemperature(weather.temperature)}
-                </ThemedText>
-                <ThemedText style={styles.feelsLike} lightColor="rgba(255,255,255,0.85)" darkColor="rgba(255,255,255,0.85)">
-                  Feels like {formatTemperature(weather.apparentTemperature)}
-                </ThemedText>
+                <View style={styles.temperatureRow}>
+                  <ThemedText style={styles.temperature}>
+                    {formatTemperature(weather.temperature)}
+                  </ThemedText>
+                  <ThemedText style={styles.feelsLike}>
+                    Ressenti {formatTemperature(weather.apparentTemperature)}
+                  </ThemedText>
+                </View>
+
                 <View style={styles.forecastMetrics}>
                   <View style={styles.metricBox}>
-                    <ThemedText style={styles.metricLabel} lightColor="#4A4A4A" darkColor="#111822">
-                      Visibility
-                    </ThemedText>
+                    <View style={styles.metricHeader}>
+                      <View style={styles.metricIconBg}>
+                        <Ionicons name="eye-outline" size={18} color="#3B82F6" />
+                      </View>
+                      <ThemedText style={styles.metricLabel}>Visibilité</ThemedText>
+                    </View>
                     <ThemedText style={styles.metricValue}>
                       {weather.visibilityKm === null
                         ? '--'
-                        : `${(Math.round(weather.visibilityKm * 10) / 10).toFixed(1)} Km`}
+                        : `${(Math.round(weather.visibilityKm * 10) / 10).toFixed(1)} km`}
                     </ThemedText>
                   </View>
+
                   <View style={styles.metricBox}>
-                    <ThemedText style={styles.metricLabel} lightColor="#4A4A4A" darkColor="#111822">
-                      Humidity
-                    </ThemedText>
+                    <View style={styles.metricHeader}>
+                      <View style={styles.metricIconBg}>
+                        <Ionicons name="water-outline" size={18} color="#3B82F6" />
+                      </View>
+                      <ThemedText style={styles.metricLabel}>Humidité</ThemedText>
+                    </View>
                     <ThemedText style={styles.metricValue}>
                       {weather.humidity === null ? '--' : `${Math.round(weather.humidity)}%`}
                     </ThemedText>
@@ -569,9 +621,7 @@ export default function HomeScreen() {
                 </View>
               </>
             ) : weatherError ? (
-              <ThemedText style={styles.forecastError} lightColor="rgba(255,255,255,0.85)" darkColor="rgba(255,255,255,0.85)">
-                {weatherError}
-              </ThemedText>
+              <ThemedText style={styles.forecastError}>{weatherError}</ThemedText>
             ) : null}
           </LinearGradient>
         </View>
@@ -583,51 +633,47 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
+    backgroundColor: '#F8FAFC',
   },
   content: {
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
     paddingBottom: 40,
-    gap: 28,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    marginBottom: 28,
   },
   profileBlock: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
+    gap: 12,
   },
   avatar: {
     width: 48,
     height: 48,
     borderRadius: 24,
+    backgroundColor: '#E2E8F0',
   },
   avatarPlaceholder: {
-    backgroundColor: '#E5E7EB',
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatarInitials: {
     fontSize: 18,
     fontWeight: '600',
-  },
-  greeting: {
-    fontSize: 22,
-    fontWeight: '600',
+    color: '#FFFFFF',
   },
   greetingPrefix: {
-    fontSize: 14,
-    fontWeight: '600',
-    letterSpacing: 0.3,
-    textTransform: 'uppercase',
-    color: '#111827',
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#64748B',
+    marginBottom: 2,
   },
   greetingName: {
-    fontSize: 26,
-    fontWeight: '800',
-    letterSpacing: -0.2,
+    fontSize: 20,
+    fontWeight: '700',
     color: '#0F172A',
   },
   notificationButton: {
@@ -636,81 +682,100 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F0F0F2',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  section: {
+    marginBottom: 28,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 14,
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '700',
-    marginBottom: 14,
+    color: '#0F172A',
   },
+  sectionBadge: {
+    backgroundColor: '#EFF6FF',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    minWidth: 32,
+    alignItems: 'center',
+  },
+  sectionBadgeText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#3B82F6',
+  },
+  // Points Card avec gradient vif
   pointsCard: {
-    borderRadius: 16,
-    padding: 16,
-    minHeight: 136,
-    shadowColor: '#0F172A',
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 3,
+    borderRadius: 24,
+    padding: 24,
+    marginBottom: 28,
+    overflow: 'hidden',
+    shadowColor: '#3B82F6',
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 10,
+  },
+  cardGlow: {
+    position: 'absolute',
+    top: -80,
+    right: -80,
+    width: 160,
+    height: 160,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 80,
   },
   pointsHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 20,
+  },
+  pointsInfo: {
+    flex: 1,
   },
   pointsTitle: {
-    fontSize: 18,
+    fontSize: 24,
     fontWeight: '800',
-    letterSpacing: 0.2,
-  },
-  pointsBadge: {
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 14,
-  },
-  pointsBadgeText: {
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  pointsBody: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  pointsBalance: {
-    fontSize: 30,
-    fontWeight: '800',
-    letterSpacing: -0.3,
-    lineHeight: 34,
+    color: '#FFFFFF',
+    marginBottom: 4,
+    textShadowColor: 'rgba(0,0,0,0.15)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
   pointsSubtitle: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '600',
-    lineHeight: 18,
+    color: 'rgba(255,255,255,0.95)',
   },
   ringWrapper: {
-    width: 78,
-    height: 78,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 72,
+    height: 72,
   },
   ringBase: {
-    width: 78,
-    height: 78,
-    borderRadius: 39,
-    backgroundColor: 'rgba(255,255,255,0.18)',
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: 'rgba(255,255,255,0.2)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   ringFill: {
     position: 'absolute',
-    width: 78,
-    height: 78,
-    borderRadius: 39,
-    borderWidth: 8,
-    borderColor: 'rgba(255,255,255,0.9)',
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    borderWidth: 6,
+    borderColor: '#FFFFFF',
     borderLeftColor: 'transparent',
     borderBottomColor: 'transparent',
   },
@@ -723,115 +788,240 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   ringText: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '800',
-    lineHeight: 20,
+    color: '#3B82F6',
   },
+  pointsProgress: {
+    gap: 10,
+  },
+  progressBarBg: {
+    height: 8,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 4,
+  },
+  progressLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.95)',
+  },
+  // Catches
   catchesLoader: {
-    height: 160,
-    borderRadius: 20,
+    height: 200,
+    borderRadius: 16,
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
-  emptyState: {
+  emptyCard: {
+    padding: 40,
+    borderRadius: 16,
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  emptyIconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  emptyText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#0F172A',
+    marginBottom: 4,
+  },
+  emptySubtext: {
     fontSize: 14,
+    fontWeight: '500',
+    color: '#64748B',
   },
   catchesList: {
-    gap: 16,
-    paddingRight: 12,
+    marginRight: -20,
   },
   catchCard: {
-    width: 200,
+    width: 220,
+    height: 300,
     borderRadius: 20,
     backgroundColor: '#FFFFFF',
-    shadowColor: '#0F1824',
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 4,
+    marginRight: 12,
     overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 15,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 6,
   },
   catchImage: {
     width: '100%',
-    height: 100,
+    height: '100%',
   },
   catchImageFallback: {
-    backgroundColor: '#ECEDEF',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  catchBody: {
+  catchOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingTop: 60,
+  },
+  catchInfoBlur: {
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 6,
+    paddingVertical: 16,
+    overflow: 'hidden',
   },
-  catchTitle: {
-    fontSize: 16,
-    fontWeight: '600',
+  catchInfo: {
+    gap: 8,
   },
-  catchMeta: {
+  catchSpecies: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  catchMeasures: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  measureItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  measureText: {
     fontSize: 13,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.95)',
   },
+  catchDateBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginTop: 4,
+  },
+  catchDate: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: 'rgba(255,255,255,0.8)',
+  },
+  // Weather - Pimpé mais simple
   forecastCard: {
-    borderRadius: 26,
+    borderRadius: 20,
     padding: 24,
-    minHeight: 180,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    shadowColor: '#3B82F6',
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
   },
   forecastHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 20,
   },
   forecastLocation: {
     flexDirection: 'row',
     gap: 6,
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.18)',
-    borderRadius: 14,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
   },
   forecastLocationText: {
     fontSize: 13,
+    fontWeight: '600',
+    color: '#3B82F6',
   },
-  forecastLoading: {
-    flex: 1,
+  weatherIconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 32,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
   },
-  forecastError: {
-    marginTop: 24,
-    fontSize: 14,
+  forecastLoading: {
+    paddingVertical: 40,
+    alignItems: 'center',
+  },
+  temperatureRow: {
+    marginBottom: 20,
   },
   temperature: {
-    fontSize: 44,
-    fontWeight: '700',
-    marginTop: 24,
+    fontSize: 56,
+    fontWeight: '800',
+    color: '#1E40AF',
+    marginBottom: 4,
   },
   feelsLike: {
-    marginTop: 6,
-    fontSize: 15,
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#64748B',
   },
   forecastMetrics: {
-    marginTop: 24,
     flexDirection: 'row',
-    gap: 16,
+    gap: 12,
   },
   metricBox: {
     flex: 1,
-    borderRadius: 18,
+    borderRadius: 14,
     backgroundColor: '#FFFFFF',
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-    alignItems: 'flex-start',
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  metricHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 10,
+  },
+  metricIconBg: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#EFF6FF',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   metricLabel: {
-    fontSize: 13,
-    fontWeight: '500',
-    marginBottom: 6,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748B',
   },
   metricValue: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  forecastError: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#64748B',
+    textAlign: 'center',
+    paddingVertical: 20,
   },
 });

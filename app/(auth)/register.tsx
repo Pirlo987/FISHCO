@@ -23,6 +23,7 @@ import * as Crypto from 'expo-crypto';
 import { ThemedSafeArea } from '@/components/SafeArea';
 import { supabase } from '@/lib/supabase';
 import { useGoogleAuth } from '@/hooks/useGoogleAuth';
+import { useFacebookAuth } from '@/hooks/useFacebookAuth';
 
 export default function RegisterScreen() {
   const router = useRouter();
@@ -83,7 +84,11 @@ export default function RegisterScreen() {
       const { data: prof } = await supabase.from('profiles').select('id').eq('id', userId).maybeSingle();
       const profileExists = !!prof;
       if (profileExists) {
-        await AsyncStorage.removeItem('profile_onboarding_pending');
+        await Promise.all([
+          AsyncStorage.removeItem('profile_onboarding_pending'),
+          AsyncStorage.setItem('profile_onboarding_done', '1'),
+          AsyncStorage.setItem('onboarding_seen', '1'),
+        ]);
         router.replace('/(tabs)');
       } else {
         await AsyncStorage.setItem('profile_onboarding_pending', '1');
@@ -116,6 +121,7 @@ export default function RegisterScreen() {
   };
 
   const { signInWithGoogle } = useGoogleAuth({ onSuccess: completeAfterAuth });
+  const { signInWithFacebook } = useFacebookAuth({ onSuccess: completeAfterAuth });
 
   const onGoogle = async () => {
     setLoading(true);
@@ -126,6 +132,20 @@ export default function RegisterScreen() {
         return;
       }
       Alert.alert('Inscription Google echouee', err?.message || 'Reessaie dans quelques instants.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onFacebook = async () => {
+    setLoading(true);
+    try {
+      await signInWithFacebook();
+    } catch (err: any) {
+      if (err?.message?.includes('annulee')) {
+        return;
+      }
+      Alert.alert('Inscription Facebook echouee', err?.message || 'Reessaie dans quelques instants.');
     } finally {
       setLoading(false);
     }
@@ -203,7 +223,7 @@ export default function RegisterScreen() {
                   </Pressable>
                   <Pressable
                     disabled={loading}
-                    onPress={() => Alert.alert('Bientot', "L'inscription avec Facebook arrive bientot.")}
+                    onPress={onFacebook}
                     style={({ pressed }) => [styles.socialBtn, pressed && { opacity: 0.85 }]}
                     accessibilityRole="button"
                     accessibilityLabel="Continuer avec Facebook"
