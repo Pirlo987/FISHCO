@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -8,6 +8,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import { useAuth } from '@/providers/AuthProvider';
 import { ThemedSafeArea } from '@/components/SafeArea';
@@ -82,10 +83,12 @@ const urlFromCatchPhoto = (path?: string | null) => {
 };
 
 export default function ProfileScreen() {
+  const router = useRouter();
   const { session, signOut } = useAuth();
   const [profile, setProfile] = React.useState<ProfileRow | null>(null);
   const [totalCatches, setTotalCatches] = React.useState<number | null>(null);
   const [biggestCatch, setBiggestCatch] = React.useState<CatchSummary | null>(null);
+  const [recentCatches, setRecentCatches] = React.useState<CatchSummary[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -100,10 +103,7 @@ export default function ProfileScreen() {
           .select('first_name,last_name,username,country,level,phone,dob,avatar_url,avatar_path,photo_url,photo_path')
           .eq('id', session.user.id)
           .maybeSingle(),
-        supabase
-          .from('catches')
-          .select('id', { count: 'exact', head: true })
-          .eq('user_id', session.user.id),
+        supabase.from('catches').select('id', { count: 'exact', head: true }).eq('user_id', session.user.id),
       ]);
 
       if (profileError) throw profileError;
@@ -123,8 +123,19 @@ export default function ProfileScreen() {
       if (biggestError) throw biggestError;
       const biggest = biggestData && biggestData.length > 0 ? (biggestData[0] as CatchSummary) : null;
       setBiggestCatch(biggest);
+
+      const { data: recentData, error: recentError } = await supabase
+        .from('catches')
+        .select('id,species,weight_kg,length_cm,caught_at,photo_path')
+        .eq('user_id', session.user.id)
+        .order('caught_at', { ascending: false })
+        .limit(3);
+
+      if (recentError) throw recentError;
+      setRecentCatches((recentData ?? []) as CatchSummary[]);
     } catch (e: any) {
       setError(e?.message ? String(e.message) : 'Chargement impossible');
+      setRecentCatches([]);
     } finally {
       setLoading(false);
     }
@@ -137,6 +148,10 @@ export default function ProfileScreen() {
   const onSignOut = async () => {
     await signOut();
     Alert.alert('Déconnecté');
+  };
+
+  const onOpenHistory = () => {
+    router.push('/history');
   };
 
   if (!session) {
@@ -160,7 +175,7 @@ export default function ProfileScreen() {
     <ThemedSafeArea>
       <ScrollView contentContainerStyle={styles.container}>
         {loading ? (
-          <View style={styles.center}> 
+          <View style={styles.center}>
             <ActivityIndicator />
           </View>
         ) : (
@@ -215,6 +230,40 @@ export default function ProfileScreen() {
               </View>
             </View>
 
+            <Pressable onPress={onOpenHistory} style={({ pressed }) => [styles.card, styles.historyCard, pressed && styles.pressedCard]}>
+              <View style={styles.historyHeader}>
+                <Text style={styles.sectionTitle}>Historique</Text>
+                <Text style={styles.linkText}>Voir tout</Text>
+              </View>
+              {recentCatches.length === 0 ? (
+                <Text style={styles.muted}>Aucune prise pour le moment.</Text>
+              ) : (
+                recentCatches.map((item) => {
+                  const photoUrl = urlFromCatchPhoto(item.photo_path);
+                  const dateLabel = formatDate(item.caught_at) || 'Date inconnue';
+                  return (
+                    <View key={item.id} style={styles.historyItem}>
+                      {photoUrl ? (
+                        <Image source={{ uri: photoUrl }} style={styles.historyThumb} contentFit="cover" />
+                      ) : (
+                        <View style={[styles.historyThumb, styles.historyThumbPlaceholder]}>
+                          <Text style={styles.historyThumbText}>?</Text>
+                        </View>
+                      )}
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.historyTitle}>{item.species || 'Prise'}</Text>
+                        <Text style={styles.historyMeta}>
+                          {dateLabel}
+                          {formatNumber(item.weight_kg) ? ` • ${formatNumber(item.weight_kg)} kg` : ''}
+                          {formatNumber(item.length_cm) ? ` • ${formatNumber(item.length_cm)} cm` : ''}
+                        </Text>
+                      </View>
+                    </View>
+                  );
+                })
+              )}
+            </Pressable>
+
             {biggestCatch && catchPhotoUrl ? (
               <View style={[styles.card, styles.catchCard]}>
                 <Image source={{ uri: catchPhotoUrl }} style={styles.catchImage} contentFit="cover" />
@@ -251,7 +300,7 @@ export default function ProfileScreen() {
               </View>
             </View>
 
-            <Pressable onPress={onSignOut} style={styles.signOutButton}>
+            <Pressable onPress={onSignOut} style={({ pressed }) => [styles.signOutButton, pressed && styles.pressedCard]}>
               <Text style={styles.signOutText}>Se déconnecter</Text>
             </Pressable>
           </>
@@ -316,7 +365,15 @@ const styles = StyleSheet.create({
   catchImage: { width: 80, height: 80, borderRadius: 12, backgroundColor: '#E5E7EB' },
   catchTitle: { fontSize: 16, fontWeight: '600' },
   catchMeta: { color: '#6B7280', marginTop: 4 },
+  historyCard: { gap: 10 },
+  historyHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  linkText: { color: '#2563EB', fontWeight: '600' },
+  muted: { color: '#6B7280' },
+  historyItem: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  historyThumb: { width: 52, height: 52, borderRadius: 10, backgroundColor: '#E5E7EB' },
+  historyThumbPlaceholder: { alignItems: 'center', justifyContent: 'center' },
+  historyThumbText: { fontSize: 18 },
+  historyTitle: { fontWeight: '600' },
+  historyMeta: { color: '#6B7280', marginTop: 2 },
+  pressedCard: { opacity: 0.92 },
 });
-
-
-
