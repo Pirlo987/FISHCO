@@ -1,6 +1,9 @@
 export type Species = {
   name: string;
   image?: string; // URL absolue ou require local (non utilisé ici)
+  // Optional flag to track whether the species entry has been validated.
+  verified?: boolean;
+  status?: string | null;
 };
 
 // Liste de quelques espèces courantes (FR + mer/douce)
