@@ -1,5 +1,5 @@
 import React from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions, Image as RNImage } from 'react-native';
 import { Image } from 'expo-image';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -118,12 +118,15 @@ export default function SpeciesDetailScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { session } = useAuth();
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
 
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [record, setRecord] = React.useState<SpeciesRecord | null>(null);
   const [imageUrl, setImageUrl] = React.useState<string | undefined>(undefined);
   const [activeTab, setActiveTab] = React.useState<'infos' | 'catches'>('infos');
+  const [imagePreviewVisible, setImagePreviewVisible] = React.useState(false);
+  const [imageSize, setImageSize] = React.useState<{ width: number; height: number } | null>(null);
   const [myCatches, setMyCatches] = React.useState<Array<{
     id: string;
     species: string;
@@ -207,6 +210,26 @@ export default function SpeciesDetailScreen() {
     };
   }, [slug, initialName]);
 
+  React.useEffect(() => {
+    if (!imageUrl) {
+      setImageSize(null);
+      return;
+    }
+    let cancelled = false;
+    RNImage.getSize(
+      imageUrl,
+      (width, height) => {
+        if (!cancelled) setImageSize({ width, height });
+      },
+      () => {
+        if (!cancelled) setImageSize(null);
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [imageUrl]);
+
   // URL signée (ou publique) pour photos utilisateur
   const urlFromPhotoPath = React.useCallback(async (path?: string | null) => {
     if (!path) return null;
@@ -219,6 +242,25 @@ export default function SpeciesDetailScreen() {
     const { data } = supabase.storage.from('catch-photos').getPublicUrl(path);
     return data.publicUrl ?? null;
   }, []);
+
+  const isPointInsideImage = React.useCallback(
+    (x: number, y: number) => {
+      if (!imageSize || !screenWidth || !screenHeight) return false;
+      const aspect = imageSize.width / imageSize.height;
+      const screenAspect = screenWidth / screenHeight;
+      let displayWidth = screenWidth;
+      let displayHeight = screenHeight;
+      if (aspect > screenAspect) {
+        displayHeight = screenWidth / aspect;
+      } else {
+        displayWidth = screenHeight * aspect;
+      }
+      const offsetX = (screenWidth - displayWidth) / 2;
+      const offsetY = (screenHeight - displayHeight) / 2;
+      return x >= offsetX && x <= offsetX + displayWidth && y >= offsetY && y <= offsetY + displayHeight;
+    },
+    [imageSize, screenWidth, screenHeight],
+  );
 
   const refreshCatches = React.useCallback(async () => {
     if (!session) {
@@ -323,104 +365,164 @@ export default function SpeciesDetailScreen() {
           <ThemedText>Erreur: {error}</ThemedText>
         </View>
       ) : (
-        <ParallaxScrollView
-          headerBackgroundColor={{ light: '#e6f1f5', dark: '#0f1416' }}
-          headerImage={
-            <View style={{ flex: 1, marginTop: -insets.top }}>
-              {imageUrl ? (
-                <Image source={{ uri: imageUrl }} style={styles.cover} contentFit="cover" />
-              ) : (
-                <View style={[styles.cover, styles.coverPlaceholder]}>
-                  <Text style={{ fontSize: 42 }}>🐟</Text>
-                </View>
-              )}
-              <Pressable onPress={() => router.back()} style={[styles.backBtn, { top: 12 + insets.top }]} hitSlop={10}>
-                <Ionicons name="chevron-back" size={26} color="#000" />
-              </Pressable>
-            </View>
-          }>
-          <View style={styles.titleRow}>
-            <ThemedText type="title" style={styles.titleText}>{displayName}</ThemedText>
-            {!!sciName && <Text style={styles.latinName}>{String(sciName)}</Text>}
-          </View>
-
-          {/* Stats card under the title, above tabs */}
-          <View style={styles.statsCard}>
-            <View style={styles.statItem}>
-              <Text style={styles.statLabel}>Plus gros</Text>
-              <Text style={styles.statValue}>
-                {stats.maxWeight !== null ? `${Number(stats.maxWeight.toFixed(2))} kg` : '—'}
-              </Text>
-            </View>
-            <View style={styles.statItem}>
-              <Text style={styles.statLabel}>Total prises</Text>
-              <Text style={styles.statValue}>{stats.total}</Text>
-            </View>
-            <View style={styles.statItem}>
-              <Text style={styles.statLabel}>Plus long</Text>
-              <Text style={styles.statValue}>
-                {stats.maxLength !== null ? `${Math.round(stats.maxLength)} cm` : '—'}
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.tabs}>
-            <Pressable
-              onPress={() => setActiveTab('infos')}
-              style={[styles.tabBtn, activeTab === 'infos' && styles.tabBtnActive]}
-            >
-              <Text style={[styles.tabText, activeTab === 'infos' && styles.tabTextActive]}>Infos</Text>
-            </Pressable>
-            <Pressable
-              onPress={() => setActiveTab('catches')}
-              style={[styles.tabBtn, activeTab === 'catches' && styles.tabBtnActive]}
-            >
-              <Text style={[styles.tabText, activeTab === 'catches' && styles.tabTextActive]}>Mes prises</Text>
-            </Pressable>
-          </View>
-
-          {activeTab === 'infos' ? (
-            <View style={styles.section}>
-              <View style={{ gap: 6 }}>
-                <Text style={styles.label}>Zones de présence</Text>
-                <WorldMiniMap tags={regionTags} height={140} />
+        <>
+          <ParallaxScrollView
+            headerBackgroundColor={{ light: '#DBEAFE', dark: '#0f172a' }}
+            headerImage={
+              <View style={{ flex: 1, marginTop: -insets.top }}>
+                {imageUrl ? (
+                  <Pressable onPress={() => setImagePreviewVisible(true)} style={{ flex: 1 }}>
+                    <Image source={{ uri: imageUrl }} style={styles.cover} contentFit="cover" />
+                  </Pressable>
+                ) : (
+                  <View style={[styles.cover, styles.coverPlaceholder]}>
+                    <Text style={{ fontSize: 42 }}>🐟</Text>
+                  </View>
+                )}
+                <Pressable onPress={() => router.back()} style={[styles.backBtn, { top: 12 + insets.top }]} hitSlop={10}>
+                  <Ionicons name="chevron-back" size={26} color="#000" />
+                </Pressable>
               </View>
-              {!!enName && (
-                <Text style={styles.row}><Text style={styles.label}>Nom anglais: </Text>{String(enName)}</Text>
-              )}
-              {!!region && (
-                <Text style={styles.row}><Text style={styles.label}>Région / Stock: </Text>{String(region)}</Text>
-              )}
-              {!!season && (
-                <Text style={styles.row}><Text style={styles.label}>Saison optimale: </Text>{String(season)}</Text>
-              )}
-              {!!methods && (
-                <Text style={styles.row}><Text style={styles.label}>Méthodes de pêche: </Text>{String(methods)}</Text>
-              )}
-              {!!baits && (
-                <Text style={styles.row}><Text style={styles.label}>Appâts: </Text>{String(baits)}</Text>
-              )}
-            </View>
-          ) : (
-            <View style={[styles.section, { marginTop: 8 }]}> 
-              {!session ? (
-                <Text style={{ color: '#666', marginTop: 6 }}>Connecte-toi pour voir tes prises de cette espèce.</Text>
-              ) : loadingCatches ? (
-                <View style={[styles.center, { paddingVertical: 16 }]}>
-                  <ActivityIndicator />
+            }>
+            <View style={styles.content}>
+              <View style={styles.titleRow}>
+                <ThemedText type="title" style={styles.titleText}>{displayName}</ThemedText>
+                {!!sciName && <Text style={styles.latinName}>{String(sciName)}</Text>}
+              </View>
+
+              {/* Stats card under the title, above tabs */}
+              <View style={styles.statsCard}>
+                <View style={styles.statItem}>
+                  <Text style={styles.statLabel}>Plus gros</Text>
+                  <Text style={styles.statValue}>
+                    {stats.maxWeight !== null ? `${Number(stats.maxWeight.toFixed(2))} kg` : '—'}
+                  </Text>
                 </View>
-              ) : myCatches.length === 0 ? (
-                <Text style={{ color: '#666', marginTop: 6 }}>Aucune prise enregistrée pour cette espèce.</Text>
+                <View style={styles.statItem}>
+                  <Text style={styles.statLabel}>Total prises</Text>
+                  <Text style={styles.statValue}>{stats.total}</Text>
+                </View>
+                <View style={styles.statItem}>
+                  <Text style={styles.statLabel}>Plus long</Text>
+                  <Text style={styles.statValue}>
+                    {stats.maxLength !== null ? `${Math.round(stats.maxLength)} cm` : '—'}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.tabs}>
+                <Pressable
+                  onPress={() => setActiveTab('infos')}
+                  style={[styles.tabBtn, activeTab === 'infos' && styles.tabBtnActive]}
+                >
+                  <Text style={[styles.tabText, activeTab === 'infos' && styles.tabTextActive]}>Infos</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => setActiveTab('catches')}
+                  style={[styles.tabBtn, activeTab === 'catches' && styles.tabBtnActive]}
+                >
+                  <Text style={[styles.tabText, activeTab === 'catches' && styles.tabTextActive]}>Mes prises</Text>
+                </Pressable>
+              </View>
+
+              {activeTab === 'infos' ? (
+                <View style={styles.section}>
+                  <View style={styles.infoCard}>
+                    <View style={styles.infoCardHeader}>
+                      <View style={styles.infoIconCircle}>
+                        <Ionicons name="earth" size={16} color="#1E3A8A" />
+                      </View>
+                      <View>
+                        <Text style={styles.infoCardTitle}>Zones de présence</Text>
+                        <Text style={styles.infoCardSubtitle}>Les principaux habitats observes</Text>
+                      </View>
+                    </View>
+                    <WorldMiniMap tags={regionTags} height={140} />
+                    {regionTags.length > 0 && (
+                      <View style={styles.tagRow}>
+                        {regionTags.map((tag) => (
+                          <View style={styles.tag} key={tag}>
+                            <Text style={styles.tagText}>{tag}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+                  </View>
+
+                  {(enName || region || season || methods || baits) && (
+                    <View style={styles.infoCard}>
+                      {enName && (
+                        <InfoRow icon="language-outline" label="Nom anglais" value={String(enName)} />
+                      )}
+                      {region && (
+                        <InfoRow icon="location-outline" label="Région / Stock" value={String(region)} />
+                      )}
+                      {season && (
+                        <InfoRow icon="calendar-outline" label="Saison optimale" value={String(season)} />
+                      )}
+                      {methods && (
+                        <InfoRow icon="fish-outline" label="Méthodes de pêche" value={String(methods)} />
+                      )}
+                      {baits && (
+                        <InfoRow icon="leaf-outline" label="Appâts recommandés" value={String(baits)} />
+                      )}
+                    </View>
+                  )}
+                </View>
               ) : (
-                <View style={{ marginTop: 4 }}>
-                  {myCatches.map((c) => (
-                    <CatchRow key={c.id} item={c} urlFromPhotoPath={urlFromPhotoPath} />
-                  ))}
+                <View style={[styles.section, { marginTop: 8 }]}>
+                  {!session ? (
+                    <Text style={{ color: '#666', marginTop: 6 }}>Connecte-toi pour voir tes prises de cette espèce.</Text>
+                  ) : loadingCatches ? (
+                    <View style={[styles.center, { paddingVertical: 16 }]}>
+                      <ActivityIndicator />
+                    </View>
+                  ) : myCatches.length === 0 ? (
+                    <Text style={{ color: '#666', marginTop: 6 }}>Aucune prise enregistrée pour cette espèce.</Text>
+                  ) : (
+                    <View style={{ marginTop: 4 }}>
+                      {myCatches.map((c) => (
+                        <CatchRow key={c.id} item={c} urlFromPhotoPath={urlFromPhotoPath} />
+                      ))}
+                    </View>
+                  )}
                 </View>
               )}
             </View>
-          )}
-        </ParallaxScrollView>
+          </ParallaxScrollView>
+          <Modal
+            visible={imagePreviewVisible}
+            animationType="fade"
+            transparent
+            onRequestClose={() => setImagePreviewVisible(false)}
+          >
+            <Pressable
+              style={styles.imageModalBackdrop}
+              onPress={(event) => {
+                const { locationX, locationY } = event.nativeEvent;
+                if (!isPointInsideImage(locationX, locationY)) setImagePreviewVisible(false);
+              }}
+            >
+              {imageUrl ? (
+                <ScrollView
+                  style={styles.imageModalScroll}
+                  contentContainerStyle={styles.imageModalContent}
+                  minimumZoomScale={1}
+                  maximumZoomScale={4}
+                  showsHorizontalScrollIndicator={false}
+                  showsVerticalScrollIndicator={false}
+                  centerContent
+                  bounces={false}
+                >
+                  <Image source={{ uri: imageUrl }} style={styles.imageModalImage} contentFit="contain" />
+                </ScrollView>
+              ) : null}
+              <Pressable style={styles.imageModalClose} onPress={() => setImagePreviewVisible(false)}>
+                <Ionicons name="close" size={26} color="#FFFFFF" />
+              </Pressable>
+            </Pressable>
+          </Modal>
+        </>
       )}
     </>
   );
@@ -431,7 +533,7 @@ const styles = StyleSheet.create({
   cover: {
     height: '100%',
     width: '100%',
-    backgroundColor: '#f1f1f1',
+    backgroundColor: '#DBEAFE',
   },
   coverPlaceholder: { alignItems: 'center', justifyContent: 'center' },
   section: { marginTop: 16, gap: 8 },
@@ -441,10 +543,73 @@ const styles = StyleSheet.create({
   titleText: { marginRight: 6 },
   latinName: { fontSize: 16, color: '#666' },
   tabs: { flexDirection: 'row', gap: 8, marginTop: 8 },
-  tabBtn: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 999, backgroundColor: '#f1f1f1' },
-  tabBtnActive: { backgroundColor: '#1e90ff' },
-  tabText: { fontWeight: '600', color: '#333' },
-  tabTextActive: { color: 'white' },
+  tabBtn: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 999, backgroundColor: '#E0ECFF' },
+  tabBtnActive: { backgroundColor: '#1E3A8A' },
+  tabText: { fontWeight: '600', color: '#0F172A' },
+  tabTextActive: { color: '#FFFFFF' },
+  infoCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#BFDBFE',
+    padding: 16,
+    gap: 12,
+    shadowColor: '#1E3A8A',
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 2,
+  },
+  infoCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  infoIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#DBEAFE',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  infoCardTitle: { fontSize: 16, fontWeight: '700', color: '#1E3A8A' },
+  infoCardSubtitle: { fontSize: 13, color: '#1E40AF' },
+  infoRow: {
+    flexDirection: 'row',
+    gap: 12,
+    alignItems: 'flex-start',
+    paddingVertical: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderColor: '#DBEAFE',
+  },
+  infoRowIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#DBEAFE',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+  infoLabel: { fontSize: 13, color: '#1E40AF', fontWeight: '600' },
+  infoValue: { fontSize: 15, color: '#0F172A', marginTop: 2 },
+  tagRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  tag: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: '#E0ECFF',
+  },
+  tagText: {
+    fontSize: 12,
+    color: '#1E3A8A',
+    fontWeight: '600',
+  },
   statsCard: {
     marginTop: 8,
     marginBottom: 8,
@@ -471,6 +636,36 @@ const styles = StyleSheet.create({
     zIndex: 2,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  imageModalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imageModalScroll: {
+    width: '100%',
+    height: '100%',
+  },
+  imageModalContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imageModalImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 0,
+    backgroundColor: '#000',
+  },
+  imageModalClose: {
+    position: 'absolute',
+    top: 40,
+    right: 24,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    borderRadius: 24,
+    padding: 8,
+    zIndex: 2,
   },
 });
 
@@ -530,5 +725,25 @@ function CatchRow({ item, urlFromPhotoPath }: { item: CatchItem; urlFromPhotoPat
         ) : null}
       </View>
     </Pressable>
+  );
+}
+
+type InfoRowProps = {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  value: string;
+};
+
+function InfoRow({ icon, label, value }: InfoRowProps) {
+  return (
+    <View style={styles.infoRow}>
+      <View style={styles.infoRowIcon}>
+        <Ionicons name={icon} size={18} color="#1E40AF" />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.infoLabel}>{label}</Text>
+        <Text style={styles.infoValue}>{value}</Text>
+      </View>
+    </View>
   );
 }
