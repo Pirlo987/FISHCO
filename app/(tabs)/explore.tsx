@@ -36,8 +36,7 @@ export default function ExploreScreen() {
   const [pendingCatchSpecies, setPendingCatchSpecies] = React.useState<Set<string>>(new Set());
   const [photoBySpecies, setPhotoBySpecies] = React.useState<Record<string, string | null>>({});
   const [discoveredFilter, setDiscoveredFilter] = React.useState<'all' | 'discovered' | 'undiscovered'>('all');
-  const [onlyDbImage, setOnlyDbImage] = React.useState(false);
-  const [onlyUserPhoto, setOnlyUserPhoto] = React.useState(false);
+  const [waterFilter, setWaterFilter] = React.useState<'all' | 'fresh' | 'salt'>('all');
   const [scrollTarget, setScrollTarget] = React.useState<string | null>(null);
 
   const { width } = useWindowDimensions();
@@ -47,7 +46,7 @@ export default function ExploreScreen() {
   const rowHeight = React.useMemo(() => tileW + 12 + 28, [tileW]);
 
   const SPECIES_BUCKET = process.env.EXPO_PUBLIC_SPECIES_BUCKET as string | undefined;
-  const HEADER_COLOR = '#0B63E5';
+  const HEADER_COLOR = '#DBEAFE';
 
   const normalizeStatus = (value: any) => {
     if (value === null || value === undefined) return null;
@@ -63,6 +62,34 @@ export default function ExploreScreen() {
       return ['true', '1', 'yes', 'y', 'oui', 'ok', 'valid', 'valide', 'validated', 'approved', 'approuve', 'approuvee'].includes(v);
     }
     return false;
+  };
+
+  const parseWaterType = (value: any): 'fresh' | 'salt' | null => {
+    if (value === null || value === undefined) return null;
+    const normalized = normalizeName(String(value));
+    if (!normalized) return null;
+    const compact = normalized.replace(/\s+/g, '');
+    const freshKeywords = [
+      'eaudouce',
+      'douce',
+      'fresh',
+      'freshwater',
+      'riviere',
+      'rivieres',
+      'fleuve',
+      'fleuves',
+      'lac',
+      'lacs',
+      'lacustre',
+      'etang',
+      'etangs',
+    ];
+    const saltKeywords = ['eausalee', 'salee', 'sale', 'salt', 'saltwater', 'mer', 'mers', 'ocean', 'oceans', 'marine', 'marin', 'maritime'];
+    const includesKeyword = (keywords: string[]) =>
+      keywords.some((keyword) => normalized.includes(keyword) || compact.includes(keyword));
+    if (includesKeyword(freshKeywords)) return 'fresh';
+    if (includesKeyword(saltKeywords)) return 'salt';
+    return null;
   };
 
   const parseVerification = (record: Record<string, any> | null | undefined) => {
@@ -197,8 +224,7 @@ export default function ExploreScreen() {
       const key = normalized || (species ? normalizeName(species) : null);
       setSearch('');
       setDiscoveredFilter('all');
-      setOnlyDbImage(false);
-      setOnlyUserPhoto(false);
+      setWaterFilter('all');
       if (key) setScrollTarget(key);
       if (target) {
         setTimeout(() => {
@@ -217,7 +243,7 @@ export default function ExploreScreen() {
       fetchDiscovered();
     });
     return off;
-  }, [fetchDiscovered, router, setSearch, setDiscoveredFilter, setOnlyDbImage, setOnlyUserPhoto]);
+  }, [fetchDiscovered, router, setSearch, setDiscoveredFilter, setWaterFilter]);
 
   const [speciesList, setSpeciesList] = React.useState<Species[]>([]);
   const PAGE_SIZE = 60;
@@ -258,11 +284,23 @@ export default function ExploreScreen() {
                 r.review ??
                 null;
               const { verified, pending } = parseVerification(r);
+              const waterSource =
+                r.water_type ??
+                r.waterType ??
+                r.water ??
+                r.environment ??
+                r.habitat ??
+                r.milieu ??
+                r.milieu_naturel ??
+                r.zone ??
+                null;
+              const waterType = parseWaterType(waterSource);
               return {
                 name,
                 image,
                 status: status ?? null,
                 verified: pending ? false : verified,
+                waterType: waterType ?? undefined,
               } as Species;
             })
             .filter((s) => s.name);
@@ -285,7 +323,21 @@ export default function ExploreScreen() {
             if (!extra?.name) continue;
             const key = normalizeName(extra.name);
             const base = byKey.get(key) ?? { name: extra.name, verified: true };
-            byKey.set(key, { ...base, image: extra.image ?? base.image, verified: base.verified ?? true });
+            const extraWaterType = parseWaterType(
+              (extra as any).waterType ??
+                (extra as any).water_type ??
+                (extra as any).water ??
+                (extra as any).environment ??
+                (extra as any).habitat ??
+                null,
+            );
+            const resolvedWaterType = base.waterType ?? extraWaterType ?? null;
+            byKey.set(key, {
+              ...base,
+              image: extra.image ?? base.image,
+              verified: base.verified ?? true,
+              waterType: resolvedWaterType ?? undefined,
+            });
           }
           if (!cancelled) setSpeciesList(Array.from(byKey.values()));
           if (!cancelled) setLoading(false);
@@ -340,11 +392,11 @@ export default function ExploreScreen() {
       const isDiscovered = verifiedDiscovered.has(key);
       if (discoveredFilter === 'discovered' && !isDiscovered) return false;
       if (discoveredFilter === 'undiscovered' && isDiscovered) return false;
-      if (onlyDbImage && !s.image) return false;
-      if (onlyUserPhoto && !photoBySpecies[key]) return false;
+      if (waterFilter === 'fresh' && s.waterType !== 'fresh') return false;
+      if (waterFilter === 'salt' && s.waterType !== 'salt') return false;
       return true;
     });
-  }, [search, speciesList, verifiedDiscovered, discoveredFilter, onlyDbImage, onlyUserPhoto, photoBySpecies]);
+  }, [search, speciesList, verifiedDiscovered, discoveredFilter, waterFilter]);
 
   React.useEffect(() => {
     if (!scrollTarget) return;
@@ -390,7 +442,7 @@ export default function ExploreScreen() {
         <View style={[styles.header, { paddingTop: 0, backgroundColor: HEADER_COLOR }]}>
           <View style={styles.titleRow}>
             <View style={styles.titleBlock}>
-              <ThemedText style={styles.title}>Explorer</ThemedText>
+              <ThemedText style={styles.title}>Fishdex</ThemedText>
               <ThemedText style={styles.subtitle}>Deviens le meilleur pecheur</ThemedText>
             </View>
             <View style={styles.statsBox}>
@@ -409,16 +461,19 @@ export default function ExploreScreen() {
               style={styles.searchInput}
               placeholderTextColor="#94A3B8"
             />
-            {search.length > 0 && (
-              <Pressable onPress={() => setSearch('')} style={styles.clearButton}>
-                <Ionicons name="close-circle" size={20} color="#94A3B8" />
-              </Pressable>
-            )}
+            <Pressable
+              onPress={() => setSearch('')}
+              style={[styles.clearButton, search.length === 0 && styles.clearButtonHidden]}
+              disabled={search.length === 0}
+            >
+              <Ionicons name="close-circle" size={20} color="#94A3B8" />
+            </Pressable>
           </View>
 
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
+            style={styles.filtersScroll}
             contentContainerStyle={styles.filtersRow}
           >
             <Pressable
@@ -450,27 +505,27 @@ export default function ExploreScreen() {
             </Pressable>
 
             <Pressable
-              onPress={() => setOnlyDbImage((v) => !v)}
-              style={[styles.chip, onlyDbImage && styles.chipActive]}
+              onPress={() => setWaterFilter((v) => (v === 'fresh' ? 'all' : 'fresh'))}
+              style={[styles.chip, waterFilter === 'fresh' && styles.chipActive]}
             >
               <Ionicons
-                name={onlyDbImage ? 'image' : 'image-outline'}
+                name={waterFilter === 'fresh' ? 'water' : 'water-outline'}
                 size={16}
-                color={onlyDbImage ? '#FFFFFF' : '#64748B'}
+                color={waterFilter === 'fresh' ? '#FFFFFF' : '#64748B'}
               />
-              <Text style={[styles.chipText, onlyDbImage && styles.chipTextActive]}>Avec image</Text>
+              <Text style={[styles.chipText, waterFilter === 'fresh' && styles.chipTextActive]}>Eau douce</Text>
             </Pressable>
 
             <Pressable
-              onPress={() => setOnlyUserPhoto((v) => !v)}
-              style={[styles.chip, onlyUserPhoto && styles.chipActive]}
+              onPress={() => setWaterFilter((v) => (v === 'salt' ? 'all' : 'salt'))}
+              style={[styles.chip, waterFilter === 'salt' && styles.chipActive]}
             >
               <Ionicons
-                name={onlyUserPhoto ? 'camera' : 'camera-outline'}
+                name={waterFilter === 'salt' ? 'boat' : 'boat-outline'}
                 size={16}
-                color={onlyUserPhoto ? '#FFFFFF' : '#64748B'}
+                color={waterFilter === 'salt' ? '#FFFFFF' : '#64748B'}
               />
-              <Text style={[styles.chipText, onlyUserPhoto && styles.chipTextActive]}>Avec photo</Text>
+              <Text style={[styles.chipText, waterFilter === 'salt' && styles.chipTextActive]}>Eau salée</Text>
             </Pressable>
           </ScrollView>
         </View>
@@ -583,7 +638,7 @@ const SpeciesTile = React.memo(function SpeciesTile({
       </View>
 
       <Text style={[styles.tileLabel, !isDiscovered && styles.tileLabelDim]} numberOfLines={1}>
-        {isDiscovered ? item.name : '???'}
+        {item.name}
       </Text>
     </Pressable>
   );
@@ -607,26 +662,26 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: '800',
-    color: '#FFFFFF',
+    color: '#1E3A8A',
     lineHeight: 34,
   },
   subtitle: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#E2E8F0',
+    color: '#1E40AF',
   },
   statsBox: {
-    backgroundColor: 'rgba(255, 255, 255, 0.16)',
+    backgroundColor: 'rgba(59, 130, 246, 0.12)',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.28)',
+    borderColor: 'rgba(59, 130, 246, 0.35)',
   },
   statsText: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: '#1E3A8A',
   },
   searchContainer: {
     flexDirection: 'row',
@@ -650,6 +705,12 @@ const styles = StyleSheet.create({
   clearButton: {
     padding: 4,
   },
+  clearButtonHidden: {
+    opacity: 0,
+  },
+  filtersScroll: {
+    marginHorizontal: -16,
+  },
   filtersRow: {
     paddingVertical: 6,
     paddingHorizontal: 16,
@@ -664,11 +725,11 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: '#1E3A8A',
   },
   chipActive: {
-    backgroundColor: '#3B82F6',
-    borderColor: '#3B82F6',
+    backgroundColor: '#1E3A8A',
+    borderColor: '#1E3A8A',
   },
   chipText: {
     color: '#64748B',
