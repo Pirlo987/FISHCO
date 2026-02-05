@@ -23,7 +23,7 @@ import { ThemedView } from '@/components/ThemedView';
 import { ThemedSafeArea } from '@/components/SafeArea';
 import { ThemedText } from '@/components/ThemedText';
 
-type CatchRow = { species: string | null; photo_path: string | null };
+type CatchRow = { species: string | null; photo_path: string | null; [key: string]: any };
 
 export default function ExploreScreen() {
   const router = useRouter();
@@ -32,7 +32,8 @@ export default function ExploreScreen() {
   const listRef = React.useRef<FlatList<Species> | null>(null);
   const [search, setSearch] = React.useState('');
   const [loading, setLoading] = React.useState(true);
-  const [discovered, setDiscovered] = React.useState<Set<string>>(new Set());
+  const [verifiedCatchSpecies, setVerifiedCatchSpecies] = React.useState<Set<string>>(new Set());
+  const [pendingCatchSpecies, setPendingCatchSpecies] = React.useState<Set<string>>(new Set());
   const [photoBySpecies, setPhotoBySpecies] = React.useState<Record<string, string | null>>({});
   const [discoveredFilter, setDiscoveredFilter] = React.useState<'all' | 'discovered' | 'undiscovered'>('all');
   const [onlyDbImage, setOnlyDbImage] = React.useState(false);
@@ -46,6 +47,59 @@ export default function ExploreScreen() {
   const rowHeight = React.useMemo(() => tileW + 12 + 28, [tileW]);
 
   const SPECIES_BUCKET = process.env.EXPO_PUBLIC_SPECIES_BUCKET as string | undefined;
+  const HEADER_COLOR = '#0B63E5';
+
+  const normalizeStatus = (value: any) => {
+    if (value === null || value === undefined) return null;
+    return String(value).trim().toLowerCase();
+  };
+
+  const isTruthyFlag = (value: any) => {
+    if (value === true) return true;
+    if (value === false) return false;
+    if (typeof value === 'number') return value > 0;
+    if (typeof value === 'string') {
+      const v = value.trim().toLowerCase();
+      return ['true', '1', 'yes', 'y', 'oui', 'ok', 'valid', 'valide', 'validated', 'approved', 'approuve', 'approuvee'].includes(v);
+    }
+    return false;
+  };
+
+  const parseVerification = (record: Record<string, any> | null | undefined) => {
+    if (!record) return { verified: true, pending: false };
+    const status = normalizeStatus(
+      record.status ??
+        record.statut ??
+        record.validation_status ??
+        record.review_status ??
+        record.moderation_status ??
+        record.state ??
+        record.review ??
+        null,
+    );
+    const rawVerified =
+      record.is_verified ??
+      record.verified ??
+      record.validated ??
+      record.approved ??
+      record.published ??
+      record.species_verified ??
+      null;
+
+    const verifiedFromFlag = isTruthyFlag(rawVerified);
+    const verifiedFromStatus =
+      status &&
+      ['verified', 'validated', 'valide', 'approved', 'approuve', 'approuvee', 'published', 'active'].includes(status);
+
+    const pending =
+      status && ['pending', 'en attente', 'in_review', 'review', 'a_valider', 'to_validate', 'draft', 'proposed'].includes(status);
+    const rejected = status && ['rejected', 'refused', 'refuse', 'deny', 'denied', 'blocked', 'archived'].includes(status);
+
+    if (rejected) return { verified: false, pending: false };
+    if (pending) return { verified: false, pending: true };
+    if (verifiedFromFlag || verifiedFromStatus) return { verified: true, pending: false };
+    return { verified: true, pending: false };
+  };
 
   // Convert a storage path or URL to a public URL
   const toPublicUrl = (candidate?: string | null, bucketHint?: string | null): string | undefined => {
@@ -89,7 +143,8 @@ export default function ExploreScreen() {
 
   const fetchDiscovered = React.useCallback(async () => {
     if (!session) {
-      setDiscovered(new Set());
+      setVerifiedCatchSpecies(new Set());
+      setPendingCatchSpecies(new Set());
       setPhotoBySpecies({});
       setLoading(false);
       return;
@@ -97,18 +152,24 @@ export default function ExploreScreen() {
     setLoading(true);
     const { data, error } = await supabase
       .from('catches')
-      .select('species, photo_path')
+      .select('*')
       .eq('user_id', session.user.id)
       .order('caught_at', { ascending: false });
 
     const photoMap: Record<string, string | null> = {};
-    const discoveredSet = new Set<string>();
+    const verifiedSet = new Set<string>();
+    const pendingSet = new Set<string>();
     if (!error && data) {
       const firstPathByKey: Record<string, string> = {};
       for (const row of data as CatchRow[]) {
         if (!row.species) continue;
         const key = normalizeName(row.species);
-        discoveredSet.add(key);
+        const { verified, pending } = parseVerification(row);
+        if (verified) {
+          verifiedSet.add(key);
+        } else if (pending) {
+          pendingSet.add(key);
+        }
         if (!firstPathByKey[key] && row.photo_path) firstPathByKey[key] = row.photo_path;
       }
       const entries = await Promise.all(
@@ -117,7 +178,8 @@ export default function ExploreScreen() {
       for (const [k, v] of entries) photoMap[k] = v ?? null;
     }
     setPhotoBySpecies(photoMap);
-    setDiscovered(discoveredSet);
+    setVerifiedCatchSpecies(verifiedSet);
+    setPendingCatchSpecies(pendingSet);
     setLoading(false);
   }, [session]);
 
@@ -186,7 +248,22 @@ export default function ExploreScreen() {
                 r.image_url ?? r.url ?? r.image ?? r.photo_url ?? r.image_path ?? r.url_path ?? r.path ?? null,
                 r.image_bucket ?? r.url_bucket ?? r.photo_bucket ?? r.bucket ?? null,
               );
-              return { name, image } as Species;
+              const status =
+                r.status ??
+                r.statut ??
+                r.validation_status ??
+                r.review_status ??
+                r.moderation_status ??
+                r.state ??
+                r.review ??
+                null;
+              const { verified, pending } = parseVerification(r);
+              return {
+                name,
+                image,
+                status: status ?? null,
+                verified: pending ? false : verified,
+              } as Species;
             })
             .filter((s) => s.name);
           const byKey = new Map<string, Species>();
@@ -203,12 +280,12 @@ export default function ExploreScreen() {
         const json = require('@/assets/data/species.json') as Species[];
         if (json && Array.isArray(json)) {
           const byKey = new Map<string, Species>();
-          for (const s of FISH_SPECIES) byKey.set(normalizeName(s.name), { ...s });
+          for (const s of FISH_SPECIES) byKey.set(normalizeName(s.name), { ...s, verified: true });
           for (const extra of json) {
             if (!extra?.name) continue;
             const key = normalizeName(extra.name);
-            const base = byKey.get(key) ?? { name: extra.name };
-            byKey.set(key, { ...base, image: extra.image ?? base.image });
+            const base = byKey.get(key) ?? { name: extra.name, verified: true };
+            byKey.set(key, { ...base, image: extra.image ?? base.image, verified: base.verified ?? true });
           }
           if (!cancelled) setSpeciesList(Array.from(byKey.values()));
           if (!cancelled) setLoading(false);
@@ -223,19 +300,51 @@ export default function ExploreScreen() {
     };
   }, []);
 
+  const speciesIndex = React.useMemo(() => {
+    const index = new Map<string, Species>();
+    for (const s of speciesList) index.set(normalizeName(s.name), s);
+    return index;
+  }, [speciesList]);
+
+  const isSpeciesVerified = React.useCallback(
+    (key: string) => {
+      const spec = speciesIndex.get(key);
+      if (!spec) return false;
+      const status = normalizeStatus(spec.status);
+      const pending =
+        status &&
+        ['pending', 'en attente', 'in_review', 'review', 'a_valider', 'to_validate', 'draft', 'proposed'].includes(status);
+      const rejected = status && ['rejected', 'refused', 'deny', 'denied', 'blocked', 'archived'].includes(status);
+      if (spec.verified === false || pending || rejected) return false;
+      if (spec.verified === true) return true;
+      if (status && ['verified', 'validated', 'valide', 'approved', 'approuve', 'approuvee', 'published', 'active'].includes(status))
+        return true;
+      return true;
+    },
+    [speciesIndex],
+  );
+
+  const verifiedDiscovered = React.useMemo(() => {
+    const out = new Set<string>();
+    verifiedCatchSpecies.forEach((key) => {
+      if (isSpeciesVerified(key)) out.add(key);
+    });
+    return out;
+  }, [verifiedCatchSpecies, isSpeciesVerified]);
+
   const filtered = React.useMemo(() => {
     const q = normalizeName(search);
     const base = q ? speciesList.filter((s) => normalizeName(s.name).includes(q)) : speciesList;
     return base.filter((s) => {
       const key = normalizeName(s.name);
-      const isDiscovered = discovered.has(key);
+      const isDiscovered = verifiedDiscovered.has(key);
       if (discoveredFilter === 'discovered' && !isDiscovered) return false;
       if (discoveredFilter === 'undiscovered' && isDiscovered) return false;
       if (onlyDbImage && !s.image) return false;
       if (onlyUserPhoto && !photoBySpecies[key]) return false;
       return true;
     });
-  }, [search, speciesList, discovered, discoveredFilter, onlyDbImage, onlyUserPhoto, photoBySpecies]);
+  }, [search, speciesList, verifiedDiscovered, discoveredFilter, onlyDbImage, onlyUserPhoto, photoBySpecies]);
 
   React.useEffect(() => {
     if (!scrollTarget) return;
@@ -272,13 +381,13 @@ export default function ExploreScreen() {
     [rowHeight],
   );
 
-  const discoveredCount = discovered.size;
+  const discoveredCount = verifiedDiscovered.size;
   const totalCount = speciesList.length;
 
   return (
-    <ThemedSafeArea>
+    <ThemedSafeArea style={{ backgroundColor: HEADER_COLOR }}>
       <ThemedView style={{ flex: 1 }}>
-        <View style={[styles.header]}>
+        <View style={[styles.header, { paddingTop: 0, backgroundColor: HEADER_COLOR }]}>
           <View style={styles.titleRow}>
             <View style={styles.titleBlock}>
               <ThemedText style={styles.title}>Explorer</ThemedText>
@@ -384,14 +493,16 @@ export default function ExploreScreen() {
             onScrollToIndexFailed={onScrollToIndexFailed}
             renderItem={({ item }) => {
               const key = normalizeName(item.name);
-              const isDiscovered = discovered.has(key);
+              const isDiscovered = verifiedDiscovered.has(key);
+              const isPending = pendingCatchSpecies.has(key) && !isDiscovered;
               const userPhoto = photoBySpecies[key] ?? null;
-              const uri = item.image ?? (isDiscovered ? userPhoto ?? null : null);
+              const uri = item.image ?? (isDiscovered || isPending ? userPhoto ?? null : null);
               return (
                 <SpeciesTile
                   item={item}
                   tileWidth={tileW}
                   isDiscovered={isDiscovered}
+                  isPending={isPending}
                   onPress={() =>
                     router.push({ pathname: '/species/[slug]', params: { slug: key, name: item.name } })
                   }
@@ -419,6 +530,7 @@ type SpeciesTileProps = {
   item: Species;
   tileWidth: number;
   isDiscovered: boolean;
+  isPending?: boolean;
   onPress: () => void;
   imageUri: string | null;
 };
@@ -427,6 +539,7 @@ const SpeciesTile = React.memo(function SpeciesTile({
   item,
   tileWidth,
   isDiscovered,
+  isPending = false,
   onPress,
   imageUri,
 }: SpeciesTileProps) {
@@ -456,6 +569,12 @@ const SpeciesTile = React.memo(function SpeciesTile({
           </View>
         )}
 
+        {isPending && (
+          <View style={styles.pendingBadge}>
+            <Ionicons name="time-outline" size={16} color="#F97316" />
+          </View>
+        )}
+
         {isDiscovered && (
           <View style={styles.discoveredBadge}>
             <Ionicons name="checkmark-circle" size={18} color="#10B981" />
@@ -475,7 +594,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 12,
     gap: 12,
-    backgroundColor: '#F8FAFC',
   },
   titleRow: {
     flexDirection: 'row',
@@ -489,33 +607,33 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: '800',
-    color: '#0F172A',
+    color: '#FFFFFF',
     lineHeight: 34,
   },
   subtitle: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#475569',
+    color: '#E2E8F0',
   },
   statsBox: {
-    backgroundColor: '#EFF6FF',
+    backgroundColor: 'rgba(255, 255, 255, 0.16)',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#BFDBFE',
+    borderColor: 'rgba(255, 255, 255, 0.28)',
   },
   statsText: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#3B82F6',
+    color: '#FFFFFF',
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: '#D9E5FF',
     borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 12,
@@ -534,8 +652,8 @@ const styles = StyleSheet.create({
   },
   filtersRow: {
     paddingVertical: 6,
+    paddingHorizontal: 16,
     gap: 8,
-    paddingRight: 6,
   },
   chip: {
     flexDirection: 'row',
@@ -547,7 +665,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    marginRight: 8,
   },
   chipActive: {
     backgroundColor: '#3B82F6',
@@ -616,6 +733,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#F8FAFC',
+  },
+  pendingBadge: {
+    position: 'absolute',
+    top: 6,
+    left: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    borderRadius: 12,
+    padding: 4,
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
   },
   discoveredBadge: {
     position: 'absolute',
