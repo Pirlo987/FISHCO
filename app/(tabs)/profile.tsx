@@ -1,15 +1,9 @@
 import React from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Image } from 'expo-image';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '@/providers/AuthProvider';
 import { ThemedSafeArea } from '@/components/SafeArea';
 import { supabase } from '@/lib/supabase';
@@ -84,10 +78,11 @@ const urlFromCatchPhoto = (path?: string | null) => {
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { session, signOut } = useAuth();
+  const { session } = useAuth();
   const [profile, setProfile] = React.useState<ProfileRow | null>(null);
   const [totalCatches, setTotalCatches] = React.useState<number | null>(null);
   const [biggestCatch, setBiggestCatch] = React.useState<CatchSummary | null>(null);
+  const [longestCatch, setLongestCatch] = React.useState<CatchSummary | null>(null);
   const [recentCatches, setRecentCatches] = React.useState<CatchSummary[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -124,12 +119,24 @@ export default function ProfileScreen() {
       const biggest = biggestData && biggestData.length > 0 ? (biggestData[0] as CatchSummary) : null;
       setBiggestCatch(biggest);
 
+      const { data: longestData, error: longestError } = await supabase
+        .from('catches')
+        .select('id,species,weight_kg,length_cm,caught_at,photo_path')
+        .eq('user_id', session.user.id)
+        .order('length_cm', { ascending: false, nullsLast: true })
+        .order('weight_kg', { ascending: false, nullsLast: true })
+        .limit(1);
+
+      if (longestError) throw longestError;
+      const longest = longestData && longestData.length > 0 ? (longestData[0] as CatchSummary) : null;
+      setLongestCatch(longest);
+
       const { data: recentData, error: recentError } = await supabase
         .from('catches')
         .select('id,species,weight_kg,length_cm,caught_at,photo_path')
         .eq('user_id', session.user.id)
         .order('caught_at', { ascending: false })
-        .limit(3);
+        .limit(5);
 
       if (recentError) throw recentError;
       setRecentCatches((recentData ?? []) as CatchSummary[]);
@@ -145,14 +152,19 @@ export default function ProfileScreen() {
     loadData();
   }, [loadData]);
 
-  const onSignOut = async () => {
-    await signOut();
-    Alert.alert('Déconnecté');
-  };
+  useFocusEffect(
+    React.useCallback(() => {
+      loadData();
+    }, [loadData]),
+  );
 
   const onOpenHistory = () => {
     router.push('/history');
   };
+
+  const openInfo = React.useCallback(() => {
+    router.push('/profile-settings');
+  }, [router]);
 
   if (!session) {
     return (
@@ -168,8 +180,25 @@ export default function ProfileScreen() {
   const levelLabel = profile?.level ? LEVEL_LABELS[profile.level] ?? profile.level : null;
   const nameParts = [profile?.first_name, profile?.last_name].filter(Boolean).join(' ').trim();
   const displayName = nameParts || profile?.username || session.user.email || 'Profil';
+  const realName = nameParts || null;
+  const usernameLabel = profile?.username ? `@${profile.username}` : displayName;
   const dobLabel = formatDate(profile?.dob);
-  const catchPhotoUrl = urlFromCatchPhoto(biggestCatch?.photo_path);
+  const statsData = React.useMemo(
+    () => [
+      { key: 'total', label: 'Total prises', value: totalCatches === null ? '—' : totalCatches },
+      {
+        key: 'weight',
+        label: 'Max poids',
+        value: formatNumber(biggestCatch?.weight_kg) ? `${formatNumber(biggestCatch?.weight_kg)} kg` : '—',
+      },
+      {
+        key: 'length',
+        label: 'Max taille',
+        value: formatNumber(longestCatch?.length_cm) ? `${formatNumber(longestCatch?.length_cm)} cm` : '—',
+      },
+    ],
+    [totalCatches, biggestCatch?.weight_kg, longestCatch?.length_cm],
+  );
 
   return (
     <ThemedSafeArea>
@@ -201,33 +230,21 @@ export default function ProfileScreen() {
                 </View>
               )}
               <View style={{ flex: 1 }}>
-                <Text style={styles.name}>{displayName}</Text>
-                {profile?.username ? <Text style={styles.username}>@{profile.username}</Text> : null}
-                <Text style={styles.email}>{session.user.email}</Text>
+                <Text style={styles.name}>{usernameLabel}</Text>
+                {realName ? <Text style={styles.subName}>{realName}</Text> : null}
               </View>
+              <Pressable onPress={openInfo} style={styles.settingsButton} hitSlop={12}>
+                <Ionicons name="settings-outline" size={22} color="#111827" />
+              </Pressable>
             </View>
 
-            <View style={styles.cardRow}>
-              <View style={styles.statCard}>
-                <Text style={styles.statLabel}>Prises totales</Text>
-                <Text style={styles.statValue}>{totalCatches ?? '—'}</Text>
-              </View>
-              <View style={[styles.statCard, styles.statCardFlex]}>
-                <Text style={styles.statLabel}>Plus grosse prise</Text>
-                {biggestCatch ? (
-                  <>
-                    <Text style={styles.statValue}>
-                      {formatNumber(biggestCatch.weight_kg) ? `${formatNumber(biggestCatch.weight_kg)} kg` : '—'}
-                    </Text>
-                    {biggestCatch.species ? <Text style={styles.statHint}>{biggestCatch.species}</Text> : null}
-                    {formatNumber(biggestCatch.length_cm) ? (
-                      <Text style={styles.statHint}>{formatNumber(biggestCatch.length_cm)} cm</Text>
-                    ) : null}
-                  </>
-                ) : (
-                  <Text style={styles.statValue}>—</Text>
-                )}
-              </View>
+            <View style={styles.statsBlock}>
+              {statsData.map((item, index) => (
+                <View key={item.key} style={[styles.statColumn, index < statsData.length - 1 ? styles.statColumnDivider : null]}>
+                  <Text style={styles.statLabel}>{item.label}</Text>
+                  <Text style={styles.statValue}>{item.value}</Text>
+                </View>
+              ))}
             </View>
 
             <Pressable onPress={onOpenHistory} style={({ pressed }) => [styles.card, styles.historyCard, pressed && styles.pressedCard]}>
@@ -263,49 +280,10 @@ export default function ProfileScreen() {
                 })
               )}
             </Pressable>
-
-            {biggestCatch && catchPhotoUrl ? (
-              <View style={[styles.card, styles.catchCard]}>
-                <Image source={{ uri: catchPhotoUrl }} style={styles.catchImage} contentFit="cover" />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.catchTitle}>{biggestCatch.species || 'Prise'}</Text>
-                  {biggestCatch.caught_at ? (
-                    <Text style={styles.catchMeta}>
-                      {new Date(biggestCatch.caught_at).toLocaleDateString()} •
-                      {formatNumber(biggestCatch.weight_kg) ? ` ${formatNumber(biggestCatch.weight_kg)} kg` : ''}
-                      {formatNumber(biggestCatch.length_cm) ? ` • ${formatNumber(biggestCatch.length_cm)} cm` : ''}
-                    </Text>
-                  ) : null}
-                </View>
-              </View>
-            ) : null}
-
-            <View style={styles.card}>
-              <Text style={styles.sectionTitle}>Informations</Text>
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Pays</Text>
-                <Text style={styles.infoValue}>{profile?.country || '—'}</Text>
-              </View>
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Niveau</Text>
-                <Text style={styles.infoValue}>{levelLabel || '—'}</Text>
-              </View>
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Téléphone</Text>
-                <Text style={styles.infoValue}>{profile?.phone || '—'}</Text>
-              </View>
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Date de naissance</Text>
-                <Text style={styles.infoValue}>{dobLabel || '—'}</Text>
-              </View>
-            </View>
-
-            <Pressable onPress={onSignOut} style={({ pressed }) => [styles.signOutButton, pressed && styles.pressedCard]}>
-              <Text style={styles.signOutText}>Se déconnecter</Text>
-            </Pressable>
           </>
         )}
       </ScrollView>
+
     </ThemedSafeArea>
   );
 }
@@ -325,21 +303,28 @@ const styles = StyleSheet.create({
   },
   avatarInitials: { fontSize: 24, fontWeight: '700', color: '#4B5563' },
   name: { fontSize: 24, fontWeight: '700' },
-  username: { color: '#6B7280', marginTop: 2 },
-  email: { color: '#374151', marginTop: 6 },
-  cardRow: { flexDirection: 'row', gap: 12 },
-  statCard: {
-    flex: 1,
+  subName: { color: '#4B5563', fontSize: 18, marginTop: 4, fontWeight: '600' },
+  settingsButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F3F4F6',
+  },
+  statsBlock: {
+    flexDirection: 'row',
     backgroundColor: '#fff',
-    padding: 16,
-    borderRadius: 12,
+    borderRadius: 16,
+    paddingVertical: 12,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#E5E7EB',
+    overflow: 'hidden',
   },
-  statCardFlex: { flex: 1.4 },
-  statLabel: { color: '#6B7280', fontSize: 12, textTransform: 'uppercase' },
-  statValue: { fontSize: 22, fontWeight: '700', marginTop: 8 },
-  statHint: { color: '#6B7280', marginTop: 2 },
+  statColumn: { flex: 1, alignItems: 'center', paddingVertical: 8, paddingHorizontal: 4, gap: 6 },
+  statColumnDivider: { borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: '#E5E7EB' },
+  statLabel: { color: '#6B7280', fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.8 },
+  statValue: { fontSize: 24, fontWeight: '700', color: '#111827' },
   card: {
     backgroundColor: '#fff',
     padding: 16,
@@ -349,22 +334,8 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   sectionTitle: { fontSize: 18, fontWeight: '600' },
-  infoRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  infoLabel: { color: '#6B7280' },
-  infoValue: { fontWeight: '600', color: '#111827' },
-  signOutButton: {
-    backgroundColor: '#ef4444',
-    padding: 14,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  signOutText: { color: 'white', fontWeight: '700' },
   errorCard: { borderColor: '#fecaca', backgroundColor: '#fee2e2' },
   errorText: { color: '#b91c1c' },
-  catchCard: { flexDirection: 'row', gap: 12, alignItems: 'center' },
-  catchImage: { width: 80, height: 80, borderRadius: 12, backgroundColor: '#E5E7EB' },
-  catchTitle: { fontSize: 16, fontWeight: '600' },
-  catchMeta: { color: '#6B7280', marginTop: 4 },
   historyCard: { gap: 10 },
   historyHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   linkText: { color: '#2563EB', fontWeight: '600' },

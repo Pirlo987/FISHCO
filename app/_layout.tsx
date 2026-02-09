@@ -198,6 +198,7 @@ export default function RootLayout() {
             <Stack.Screen name="onboarding" options={{ headerShown: false }} />
             <Stack.Screen name="history" options={{ headerShown: false }} />
             <Stack.Screen name="catches" options={{ headerShown: false }} />
+            <Stack.Screen name="profile-settings" options={{ headerShown: false, presentation: 'modal' }} />
             <Stack.Screen name="+not-found" />
           </Stack>
         </AuthGate>
