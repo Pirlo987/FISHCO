@@ -59,6 +59,7 @@ if (!(global as any).btoa) {
 const TAB_BAR_SPACER = 56;
 const SPECIES_AI_FUNCTION = process.env.EXPO_PUBLIC_SPECIES_AI_FUNCTION ?? 'detect-species';
 const AI_FALLBACK_MESSAGE = "Votre photo n'est pas assez nette pour déterminer l'espèce capturée. J'espère qu'au moins c'est un poisson :)";
+const AI_UNMATCHED_MESSAGE = "Cette espèce ne figure pas encore dans notre base. Notre équipe va vérifier et l'ajoutera si elle s'avère être une espèce valide !";
 
 type Step = 1 | 2 | 3 | 4;
 
@@ -86,6 +87,7 @@ type AISuggestion = {
 
 type DetectSpeciesResponse = {
   suggestions?: AISuggestion[];
+  unmatched?: boolean;
   error?: string;
 };
 
@@ -101,6 +103,7 @@ export default function AddCatchScreen() {
   const [lure, setLure] = React.useState('');
   const [location, setLocation] = React.useState('');
   const [visibility, setVisibility] = React.useState<'public' | 'private'>('public');
+  const [title, setTitle] = React.useState('');
   const [description, setDescription] = React.useState('');
   const [loading, setLoading] = React.useState(false);
   const [image, setImage] = React.useState<ImagePicker.ImagePickerAsset | null>(null);
@@ -202,6 +205,7 @@ export default function AddCatchScreen() {
     setLure('');
     setLocation('');
     setVisibility('public');
+    setTitle('');
     setDescription('');
     setImage(null);
     setErrors({});
@@ -218,7 +222,7 @@ export default function AddCatchScreen() {
     }
     const res = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
-      allowsEditing: true,
+      allowsEditing: false,
       quality: 0.85,
     });
     if (!res.canceled) {
@@ -235,7 +239,7 @@ export default function AddCatchScreen() {
       return;
     }
     const res = await ImagePicker.launchCameraAsync({
-      allowsEditing: true,
+      allowsEditing: false,
       quality: 0.85,
     });
     if (!res.canceled) {
@@ -346,11 +350,24 @@ export default function AddCatchScreen() {
         { body: { image: imageUrl } }
       );
       if (aiRequestIdRef.current !== requestId) return;
-      if (error || data?.error) {
-        const msg = error?.message || data?.error || 'Analyse indisponible';
-        throw new Error(msg);
+      if (error) {
+        let debugBody = '';
+        try { debugBody = JSON.stringify(await (error as any).context?.json()); } catch {}
+        console.error('[detect-species] ERROR body:', debugBody || error.message);
+        throw new Error(error.message || 'Analyse indisponible');
       }
-      
+      console.log('[detect-species] response', JSON.stringify(data, null, 2));
+      if (data?.error && !data?.unmatched) {
+        throw new Error(data.error);
+      }
+
+      // L'IA n'a trouvé aucune correspondance dans notre BDD
+      if (data?.unmatched) {
+        setAiSuggestions([]);
+        setAiError(AI_UNMATCHED_MESSAGE);
+        return;
+      }
+
       const suggestions = data?.suggestions || [];
       const cleaned = suggestions.filter((s) => {
         const name = (s?.species || '').trim();
@@ -447,6 +464,7 @@ export default function AddCatchScreen() {
           length_cm: lengthVal,
           region: location.trim(),
           notes: lure.trim(),
+          title: title.trim(),
           photo_path: filePath,
           is_public: isPublicAllowed,
           description: description.trim(),
@@ -471,7 +489,7 @@ export default function AddCatchScreen() {
     } finally {
       setLoading(false);
     }
-  }, [session, image, weight, length, species, location, lure, visibility, description, prepareImageForUpload, resetForm, router, isKnownSpecies]);
+  }, [session, image, weight, length, species, location, lure, visibility, title, description, prepareImageForUpload, resetForm, router, isKnownSpecies]);
 
   // --- RENDU UI ---
   const Step1 = (
@@ -577,6 +595,7 @@ export default function AddCatchScreen() {
       {!isKnownSpecies && (
         <Text style={styles.helperText}>Espèce non reconnue : la prise sera privée et transmise en validation.</Text>
       )}
+      <TextInput style={styles.input} placeholder="Titre (Optionnel)" value={title} onChangeText={setTitle} />
       <TextInput style={styles.textarea} placeholder="Description..." multiline value={description} onChangeText={setDescription} />
     </View>
   );

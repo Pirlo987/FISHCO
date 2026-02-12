@@ -360,10 +360,12 @@ export default function HomeScreen() {
             style={({ pressed }) => [styles.profileBlock, { opacity: pressed ? 0.7 : 1 }]}
           >
             {profileAvatarUrl ? (
-              <Image source={{ uri: profileAvatarUrl }} style={styles.avatar} contentFit="cover" />
+              <View style={styles.avatarRing}>
+                <Image source={{ uri: profileAvatarUrl }} style={styles.avatar} contentFit="cover" />
+              </View>
             ) : (
               <LinearGradient
-                colors={['#3B82F6', '#1D4ED8']}
+                colors={['#0a7ea4', '#064E5B']}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={[styles.avatar, styles.avatarPlaceholder]}
@@ -380,20 +382,20 @@ export default function HomeScreen() {
           <Pressable
             style={({ pressed }) => [styles.notificationButton, { opacity: pressed ? 0.6 : 1 }]}
           >
-            <Ionicons name="notifications-outline" size={22} color="#64748B" />
+            <Ionicons name="notifications-outline" size={22} color="#0a7ea4" />
           </Pressable>
         </View>
 
-        {/* Points Card - Gradient Bleu/Cyan Vif */}
+        {/* Points Card */}
         <LinearGradient
-          colors={['#3B82F6', '#06B6D4', '#0EA5E9']}
+          colors={['#064E5B', '#0a7ea4', '#0D9CB8']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1.2, y: 1.2 }}
           style={styles.pointsCard}
         >
-          {/* Effet de lumière */}
           <View style={styles.cardGlow} />
-          
+          <View style={styles.cardGlowBottom} />
+
           <View style={styles.pointsHeader}>
             <View style={styles.pointsInfo}>
               <ThemedText style={styles.pointsTitle}>{currentTitle}</ThemedText>
@@ -458,20 +460,23 @@ export default function HomeScreen() {
         {/* Recent Catches */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <ThemedText style={styles.sectionTitle}>Dernières prises</ThemedText>
+            <View style={styles.sectionTitleRow}>
+              <View style={styles.sectionDot} />
+              <ThemedText style={styles.sectionTitle}>Dernières prises</ThemedText>
+            </View>
             <View style={styles.sectionBadge}>
               <ThemedText style={styles.sectionBadgeText}>{recentCatches.length}</ThemedText>
             </View>
           </View>
-          
+
           {loadingCatches ? (
             <View style={styles.catchesLoader}>
-              <ActivityIndicator size="large" color="#3B82F6" />
+              <ActivityIndicator size="large" color="#0a7ea4" />
             </View>
           ) : recentCatches.length === 0 ? (
             <View style={styles.emptyCard}>
               <View style={styles.emptyIconCircle}>
-                <Ionicons name="fish-outline" size={40} color="#94A3B8" />
+                <Ionicons name="fish-outline" size={40} color="#0a7ea4" />
               </View>
               <ThemedText style={styles.emptyText}>Aucune prise enregistrée</ThemedText>
               <ThemedText style={styles.emptySubtext}>
@@ -487,8 +492,8 @@ export default function HomeScreen() {
                 const caughtDate = formatDate(item.caught_at);
 
                 return (
-                  <Pressable 
-                    key={item.id} 
+                  <Pressable
+                    key={item.id}
                     style={({ pressed }) => [
                       styles.catchCard,
                       { opacity: pressed ? 0.9 : 1 }
@@ -503,18 +508,17 @@ export default function HomeScreen() {
                       />
                     ) : (
                       <LinearGradient
-                        colors={['#3B82F6', '#1D4ED8']}
+                        colors={['#0a7ea4', '#064E5B']}
                         start={{ x: 0, y: 0 }}
                         end={{ x: 1, y: 1 }}
                         style={[styles.catchImage, styles.catchImageFallback]}
                       >
-                        <Ionicons name="fish" size={56} color="rgba(255,255,255,0.4)" />
+                        <Ionicons name="fish" size={56} color="rgba(255,255,255,0.3)" />
                       </LinearGradient>
                     )}
-                    
-                    {/* Overlay avec flou */}
+
                     <LinearGradient
-                      colors={['transparent', 'rgba(0,0,0,0.3)', 'rgba(0,0,0,0.7)']}
+                      colors={['transparent', 'rgba(6,78,91,0.4)', 'rgba(6,78,91,0.85)']}
                       style={styles.catchOverlay}
                     >
                       <BlurView intensity={20} tint="dark" style={styles.catchInfoBlur}>
@@ -552,34 +556,37 @@ export default function HomeScreen() {
           )}
         </View>
 
-        {/* Weather Forecast - Pimpé mais simple */}
+        {/* Weather Forecast */}
         <View style={styles.section}>
-          <ThemedText style={styles.sectionTitle}>Météo</ThemedText>
+          <View style={styles.sectionTitleRow}>
+            <View style={styles.sectionDot} />
+            <ThemedText style={styles.sectionTitle}>Météo</ThemedText>
+          </View>
           <LinearGradient
-            colors={['#EFF6FF', '#DBEAFE']}
+            colors={['#E8F6F8', '#D4EFF3']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.forecastCard}
           >
             <View style={styles.forecastHeader}>
               <View style={styles.forecastLocation}>
-                <Ionicons name="location-outline" size={14} color="#3B82F6" />
+                <Ionicons name="location-outline" size={14} color="#0a7ea4" />
                 <ThemedText style={styles.forecastLocationText}>
                   {weather?.label ?? 'Localisation'}
                 </ThemedText>
               </View>
               {loadingWeather ? (
-                <ActivityIndicator size="small" color="#3B82F6" />
+                <ActivityIndicator size="small" color="#0a7ea4" />
               ) : (
                 <View style={styles.weatherIconCircle}>
-                  <Ionicons name="partly-sunny" size={32} color="#3B82F6" />
+                  <Ionicons name="partly-sunny" size={32} color="#0a7ea4" />
                 </View>
               )}
             </View>
 
             {loadingWeather && !weather ? (
               <View style={styles.forecastLoading}>
-                <ActivityIndicator size="large" color="#3B82F6" />
+                <ActivityIndicator size="large" color="#0a7ea4" />
               </View>
             ) : weather ? (
               <>
@@ -596,7 +603,7 @@ export default function HomeScreen() {
                   <View style={styles.metricBox}>
                     <View style={styles.metricHeader}>
                       <View style={styles.metricIconBg}>
-                        <Ionicons name="eye-outline" size={18} color="#3B82F6" />
+                        <Ionicons name="eye-outline" size={18} color="#0a7ea4" />
                       </View>
                       <ThemedText style={styles.metricLabel}>Visibilité</ThemedText>
                     </View>
@@ -610,7 +617,7 @@ export default function HomeScreen() {
                   <View style={styles.metricBox}>
                     <View style={styles.metricHeader}>
                       <View style={styles.metricIconBg}>
-                        <Ionicons name="water-outline" size={18} color="#3B82F6" />
+                        <Ionicons name="water-outline" size={18} color="#0a7ea4" />
                       </View>
                       <ThemedText style={styles.metricLabel}>Humidité</ThemedText>
                     </View>
@@ -633,12 +640,14 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#F0F7F8',
   },
   content: {
     paddingHorizontal: 20,
     paddingBottom: 40,
   },
+
+  // ── Header ──
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -648,13 +657,21 @@ const styles = StyleSheet.create({
   profileBlock: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 14,
+  },
+  avatarRing: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    borderWidth: 2.5,
+    borderColor: '#0a7ea4',
+    padding: 2,
   },
   avatar: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: '#E2E8F0',
+    backgroundColor: '#D4EFF3',
   },
   avatarPlaceholder: {
     alignItems: 'center',
@@ -662,30 +679,38 @@ const styles = StyleSheet.create({
   },
   avatarInitials: {
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#FFFFFF',
   },
   greetingPrefix: {
     fontSize: 13,
     fontWeight: '500',
-    color: '#64748B',
+    color: '#5B8A93',
     marginBottom: 2,
   },
   greetingName: {
-    fontSize: 20,
-    fontWeight: '700',
+    fontSize: 22,
+    fontWeight: '800',
     color: '#0F172A',
+    letterSpacing: -0.3,
   },
   notificationButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderWidth: 1.5,
+    borderColor: '#C3E4E9',
+    shadowColor: '#0a7ea4',
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
   },
+
+  // ── Sections ──
   section: {
     marginBottom: 28,
   },
@@ -695,13 +720,25 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 14,
   },
+  sectionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 14,
+  },
+  sectionDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#0a7ea4',
+  },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '700',
     color: '#0F172A',
   },
   sectionBadge: {
-    backgroundColor: '#EFF6FF',
+    backgroundColor: '#E0F4F7',
     borderRadius: 10,
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -710,29 +747,39 @@ const styles = StyleSheet.create({
   },
   sectionBadgeText: {
     fontSize: 14,
-    fontWeight: '600',
-    color: '#3B82F6',
+    fontWeight: '700',
+    color: '#0a7ea4',
   },
-  // Points Card avec gradient vif
+
+  // ── Points Card ──
   pointsCard: {
     borderRadius: 24,
     padding: 24,
     marginBottom: 28,
     overflow: 'hidden',
-    shadowColor: '#3B82F6',
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 10,
+    shadowColor: '#064E5B',
+    shadowOpacity: 0.35,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 12,
   },
   cardGlow: {
     position: 'absolute',
-    top: -80,
-    right: -80,
+    top: -70,
+    right: -70,
     width: 160,
     height: 160,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: 'rgba(255,255,255,0.12)',
     borderRadius: 80,
+  },
+  cardGlowBottom: {
+    position: 'absolute',
+    bottom: -50,
+    left: -40,
+    width: 120,
+    height: 120,
+    backgroundColor: 'rgba(245,158,11,0.12)',
+    borderRadius: 60,
   },
   pointsHeader: {
     flexDirection: 'row',
@@ -744,96 +791,98 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   pointsTitle: {
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: '800',
     color: '#FFFFFF',
-    marginBottom: 4,
-    textShadowColor: 'rgba(0,0,0,0.15)',
+    marginBottom: 6,
+    textShadowColor: 'rgba(0,0,0,0.2)',
     textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
+    textShadowRadius: 4,
+    letterSpacing: -0.3,
   },
   pointsSubtitle: {
     fontSize: 15,
     fontWeight: '600',
-    color: 'rgba(255,255,255,0.95)',
+    color: 'rgba(255,255,255,0.9)',
   },
   ringWrapper: {
-    width: 72,
-    height: 72,
+    width: 76,
+    height: 76,
   },
   ringBase: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    backgroundColor: 'rgba(255,255,255,0.15)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   ringFill: {
     position: 'absolute',
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+    width: 76,
+    height: 76,
+    borderRadius: 38,
     borderWidth: 6,
     borderColor: '#FFFFFF',
     borderLeftColor: 'transparent',
     borderBottomColor: 'transparent',
   },
   ringInner: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
   },
   ringText: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '800',
-    color: '#3B82F6',
+    color: '#0a7ea4',
   },
   pointsProgress: {
     gap: 10,
   },
   progressBarBg: {
     height: 8,
-    backgroundColor: 'rgba(255,255,255,0.25)',
+    backgroundColor: 'rgba(255,255,255,0.2)',
     borderRadius: 4,
     overflow: 'hidden',
   },
   progressBarFill: {
     height: '100%',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F5C563',
     borderRadius: 4,
   },
   progressLabel: {
     fontSize: 13,
     fontWeight: '600',
-    color: 'rgba(255,255,255,0.95)',
+    color: 'rgba(255,255,255,0.9)',
   },
-  // Catches
+
+  // ── Catches ──
   catchesLoader: {
     height: 200,
-    borderRadius: 16,
+    borderRadius: 18,
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: '#C3E4E9',
   },
   emptyCard: {
     padding: 40,
-    borderRadius: 16,
+    borderRadius: 18,
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: '#C3E4E9',
   },
   emptyIconCircle: {
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: '#F1F5F9',
+    backgroundColor: '#E8F6F8',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
@@ -847,7 +896,7 @@ const styles = StyleSheet.create({
   emptySubtext: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#64748B',
+    color: '#5B8A93',
   },
   catchesList: {
     marginRight: -20,
@@ -855,15 +904,15 @@ const styles = StyleSheet.create({
   catchCard: {
     width: 220,
     height: 300,
-    borderRadius: 20,
+    borderRadius: 22,
     backgroundColor: '#FFFFFF',
     marginRight: 12,
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 15,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 6,
+    shadowColor: '#064E5B',
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 8,
   },
   catchImage: {
     width: '100%',
@@ -918,18 +967,19 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: 'rgba(255,255,255,0.8)',
   },
-  // Weather - Pimpé mais simple
+
+  // ── Weather ──
   forecastCard: {
-    borderRadius: 20,
+    borderRadius: 22,
     padding: 24,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#BFDBFE',
-    shadowColor: '#3B82F6',
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
+    borderColor: '#B2E5EC',
+    shadowColor: '#0a7ea4',
+    shadowOpacity: 0.1,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
   },
   forecastHeader: {
     flexDirection: 'row',
@@ -946,12 +996,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderWidth: 1,
-    borderColor: '#BFDBFE',
+    borderColor: '#B2E5EC',
   },
   forecastLocationText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#3B82F6',
+    color: '#0a7ea4',
   },
   weatherIconCircle: {
     width: 56,
@@ -961,7 +1011,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#BFDBFE',
+    borderColor: '#B2E5EC',
   },
   forecastLoading: {
     paddingVertical: 40,
@@ -973,13 +1023,14 @@ const styles = StyleSheet.create({
   temperature: {
     fontSize: 56,
     fontWeight: '800',
-    color: '#1E40AF',
+    color: '#064E5B',
     marginBottom: 4,
+    letterSpacing: -1,
   },
   feelsLike: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#64748B',
+    color: '#5B8A93',
   },
   forecastMetrics: {
     flexDirection: 'row',
@@ -987,11 +1038,11 @@ const styles = StyleSheet.create({
   },
   metricBox: {
     flex: 1,
-    borderRadius: 14,
+    borderRadius: 16,
     backgroundColor: '#FFFFFF',
     padding: 16,
     borderWidth: 1,
-    borderColor: '#BFDBFE',
+    borderColor: '#B2E5EC',
   },
   metricHeader: {
     flexDirection: 'row',
@@ -1003,14 +1054,14 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#EFF6FF',
+    backgroundColor: '#E8F6F8',
     alignItems: 'center',
     justifyContent: 'center',
   },
   metricLabel: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#64748B',
+    color: '#5B8A93',
   },
   metricValue: {
     fontSize: 20,
@@ -1020,7 +1071,7 @@ const styles = StyleSheet.create({
   forecastError: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#64748B',
+    color: '#5B8A93',
     textAlign: 'center',
     paddingVertical: 20,
   },
