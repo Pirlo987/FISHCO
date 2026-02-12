@@ -86,10 +86,11 @@ export default function ProfileScreen() {
   const [recentCatches, setRecentCatches] = React.useState<CatchSummary[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
+  const hasLoadedOnce = React.useRef(false);
 
-  const loadData = React.useCallback(async () => {
+  const loadData = React.useCallback(async (showLoader = false) => {
     if (!session?.user?.id) return;
-    setLoading(true);
+    if (showLoader) setLoading(true);
     setError(null);
     try {
       const [{ data: profileData, error: profileError }, { count, error: countError }] = await Promise.all([
@@ -140,21 +141,26 @@ export default function ProfileScreen() {
 
       if (recentError) throw recentError;
       setRecentCatches((recentData ?? []) as CatchSummary[]);
+      hasLoadedOnce.current = true;
     } catch (e: any) {
       setError(e?.message ? String(e.message) : 'Chargement impossible');
       setRecentCatches([]);
     } finally {
-      setLoading(false);
+      if (showLoader) setLoading(false);
     }
   }, [session?.user?.id]);
 
   React.useEffect(() => {
-    loadData();
+    loadData(true);
   }, [loadData]);
 
   useFocusEffect(
     React.useCallback(() => {
-      loadData();
+      if (!hasLoadedOnce.current) {
+        loadData(true);
+        return;
+      }
+      loadData(false);
     }, [loadData]),
   );
 

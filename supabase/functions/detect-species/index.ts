@@ -6,14 +6,36 @@ type Suggestion = {
   confidence: number;
   matched?: boolean;
   source?: "database" | "ai";
+  unmatched?: boolean;
 };
 
 const MODEL = Deno.env.get("OPENAI_MODEL") ?? "gpt-5.1";
 const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-const PROMPT =
-  "Tu es expert pour trouver l'espece de poisson. Analyse la photo fournie et reponds uniquement avec du JSON ayant la forme suivante : {\"primary\":{\"species\":\"Nom du poisson\",\"confidence\":98},\"alternatives\":[{\"species\":\"Deuxieme option\",\"confidence\":55},{\"species\":\"Troisieme option\",\"confidence\":38}]} . La confiance est toujours un pourcentage entier entre 0 et 100.";
+const JSON_FORMAT =
+  '{"primary":{"species":"Nom exact de la liste","confidence":98},"alternatives":[{"species":"Deuxieme option","confidence":55},{"species":"Troisieme option","confidence":38}]}';
+
+const buildPrompt = (speciesNames: string[]) => {
+  const list = speciesNames.map((n, i) => `${i + 1}. ${n}`).join("\n");
+  return (
+    `Tu es expert en identification de poissons.\n` +
+    `Voici la liste EXHAUSTIVE des especes disponibles :\n${list}\n\n` +
+    `REGLES :\n` +
+    `- Tu DOIS choisir UNIQUEMENT parmi les especes de cette liste.\n` +
+    `- Utilise le nom EXACT tel qu'il apparait dans la liste (orthographe, accents, parentheses).\n` +
+    `- Si le poisson ressemble a plusieurs especes de la liste, classe-les par confiance.\n` +
+    `- Si le poisson ne correspond a AUCUNE espece de la liste meme de loin, retourne "unknown" comme nom d'espece avec une confiance de 0.\n` +
+    `- La confiance est toujours un pourcentage entier entre 0 et 100.\n\n` +
+    `Reponds uniquement avec du JSON : ${JSON_FORMAT}`
+  );
+};
+
+// Fallback si la BDD est indisponible
+const FALLBACK_PROMPT =
+  "Tu es expert pour trouver l'espece de poisson. Analyse la photo fournie et reponds uniquement avec du JSON ayant la forme suivante : " +
+  JSON_FORMAT +
+  " . La confiance est toujours un pourcentage entier entre 0 et 100.";
 
 const jsonResponse = (payload: unknown, init: ResponseInit = {}) =>
   new Response(JSON.stringify(payload), {
@@ -176,11 +198,23 @@ serve(async (req) => {
     return jsonResponse({ error: "Image obligatoire" }, { status: 400 });
   }
 
-  // Prepares the species list from the database in parallel with the OpenAI call
-  const speciesDirectoryPromise = loadSpeciesDirectory().catch((error) => {
+  // Load species BEFORE calling OpenAI so we can constrain the prompt
+  let directory: Map<string, string> | null = null;
+  try {
+    directory = await loadSpeciesDirectory();
+  } catch (error) {
     console.error("Failed to load species directory", error);
-    return null;
-  });
+  }
+
+  const speciesNames = directory?.size
+    ? Array.from(directory.values())
+    : null;
+
+  const prompt = speciesNames
+    ? buildPrompt(speciesNames)
+    : FALLBACK_PROMPT;
+
+  console.log(`[detect-species] species loaded: ${speciesNames?.length ?? 0}, prompt length: ${prompt.length}`);
 
   try {
     const response = await fetch("https://api.openai.com/v1/responses", {
@@ -192,24 +226,24 @@ serve(async (req) => {
       body: JSON.stringify({
         model: MODEL,
         input: [
-          { role: "system", content: [{ type: "text", text: PROMPT }] },
+          { role: "system", content: [{ type: "input_text", text: prompt }] },
           {
             role: "user",
             content: [
               {
-                type: "text",
+                type: "input_text",
                 text:
                   "Analyse l'image jointe et renvoie exactement le JSON demande (species + confidence). Les pourcentages doivent etre des entiers.",
               },
               {
                 type: "input_image",
-                image_url: { url: sanitizedImage },
+                image_url: sanitizedImage,
               },
             ],
           },
         ],
         max_output_tokens: 300,
-        response_format: { type: "json_object" },
+        text: { format: { type: "json_object" } },
         reasoning: { effort: "low" },
       }),
     });
@@ -217,7 +251,10 @@ serve(async (req) => {
     if (!response.ok) {
       const errorText = await response.text();
       console.error("OpenAI error", response.status, errorText);
-      return jsonResponse({ error: "Analyse indisponible" }, { status: 502 });
+      return jsonResponse(
+        { error: "Analyse indisponible", debug: { status: response.status, detail: errorText.slice(0, 500) } },
+        { status: 502 },
+      );
     }
 
     const payload = await response.json();
@@ -238,8 +275,37 @@ serve(async (req) => {
       return jsonResponse({ error: "Aucune proposition" }, { status: 422 });
     }
 
-    const directory = await speciesDirectoryPromise;
+    // Check if all suggestions are "unknown" (AI couldn't match anything)
+    const allUnknown = suggestions.every((s) => {
+      const lower = s.species.toLowerCase();
+      return lower === "unknown" || lower === "inconnu" || lower === "unk" || s.confidence === 0;
+    });
+
+    if (allUnknown) {
+      return jsonResponse({
+        suggestions: [],
+        unmatched: true,
+        error: "Espece non reconnue",
+      });
+    }
+
+    // When constrained by the species list, all results come from the DB
     const harmonized = suggestions.map((suggestion) => {
+      if (speciesNames) {
+        // We gave the AI a constrained list — verify the name is actually in it
+        const matchedLabel = matchAgainstDirectory(suggestion.species, directory);
+        if (matchedLabel) {
+          return {
+            ...suggestion,
+            species: matchedLabel,
+            matched: true,
+            source: "database" as const,
+          };
+        }
+        // AI returned a name not in the list despite instructions — flag it
+        return { ...suggestion, matched: false, source: "ai" as const, unmatched: true };
+      }
+      // Fallback mode (no species list loaded) — try best-effort matching
       const matchedLabel = matchAgainstDirectory(suggestion.species, directory);
       if (matchedLabel) {
         return {
@@ -255,7 +321,8 @@ serve(async (req) => {
     return jsonResponse({ suggestions: harmonized.slice(0, 3) });
   } catch (error) {
     console.error("detect-species error", error);
-    return jsonResponse({ error: "Erreur interne" }, { status: 500 });
+    const msg = error instanceof Error ? error.message : String(error);
+    return jsonResponse({ error: "Erreur interne", debug: msg.slice(0, 500) }, { status: 500 });
   }
 });
 
