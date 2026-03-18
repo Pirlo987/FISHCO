@@ -24,9 +24,11 @@ import { ThemedSafeArea } from '@/components/SafeArea';
 import { supabase } from '@/lib/supabase';
 import { useGoogleAuth } from '@/hooks/useGoogleAuth';
 import { useFacebookAuth } from '@/hooks/useFacebookAuth';
+import { useLanguage } from '@/providers/LanguageProvider';
 
 export default function LoginScreen() {
   const router = useRouter();
+  const { t, locale, setLocale } = useLanguage();
   const emailRef = React.useRef<TextInput>(null);
   const passwordRef = React.useRef<TextInput>(null);
   const [email, setEmail] = React.useState('');
@@ -100,14 +102,14 @@ export default function LoginScreen() {
 
   const onLogin = async () => {
     if (!email || !password) {
-      Alert.alert('Champs requis', 'Email et mot de passe sont requis.');
+      Alert.alert(t('auth_required_fields'), t('login_email_required'));
       return;
     }
     setLoading(true);
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
       setLoading(false);
-      Alert.alert('Connexion echouee', error.message);
+      Alert.alert(t('login_failed'), error.message);
       return;
     }
     try {
@@ -127,10 +129,10 @@ export default function LoginScreen() {
     try {
       await signInWithGoogle();
     } catch (err: any) {
-      if (err?.message?.includes('annulee')) {
+      if (err?.message?.includes('annulee') || err?.message?.includes('cancelled')) {
         return;
       }
-      Alert.alert('Connexion Google echouee', err?.message || 'Reessaie dans quelques instants.');
+      Alert.alert(t('login_google_failed'), err?.message || t('auth_retry'));
     } finally {
       setLoading(false);
     }
@@ -141,10 +143,10 @@ export default function LoginScreen() {
     try {
       await signInWithFacebook();
     } catch (err: any) {
-      if (err?.message?.includes('annulee')) {
+      if (err?.message?.includes('annulee') || err?.message?.includes('cancelled')) {
         return;
       }
-      Alert.alert('Connexion Facebook echouee', err?.message || 'Reessaie dans quelques instants.');
+      Alert.alert(t('login_facebook_failed'), err?.message || t('auth_retry'));
     } finally {
       setLoading(false);
     }
@@ -165,7 +167,7 @@ export default function LoginScreen() {
       });
 
       if (!credential.identityToken) {
-        throw new Error('Token Apple non fourni.');
+        throw new Error(t('login_apple_token'));
       }
 
       const { data, error } = await supabase.auth.signInWithIdToken({
@@ -181,7 +183,7 @@ export default function LoginScreen() {
       if (err?.code === 'ERR_REQUEST_CANCELED' || err?.code === 'ERR_CANCELED') {
         return;
       }
-      Alert.alert('Connexion Apple echouee', err?.message || 'Reessaie dans quelques instants.');
+      Alert.alert(t('login_apple_failed'), err?.message || t('auth_retry'));
     } finally {
       setLoading(false);
     }
@@ -192,10 +194,26 @@ export default function LoginScreen() {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
           <Animated.View style={[styles.container, { transform: [{ translateY: keyboardAnim }] }]}>
+            {/* Language toggle */}
+            <View style={styles.langRow}>
+              <Pressable
+                onPress={() => setLocale('fr')}
+                style={[styles.langBtn, locale === 'fr' && styles.langBtnActive]}
+              >
+                <Text style={[styles.langBtnText, locale === 'fr' && styles.langBtnTextActive]}>FR</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setLocale('en')}
+                style={[styles.langBtn, locale === 'en' && styles.langBtnActive]}
+              >
+                <Text style={[styles.langBtnText, locale === 'en' && styles.langBtnTextActive]}>EN</Text>
+              </Pressable>
+            </View>
+
             <View style={styles.content}>
               <View style={styles.header}>
-                <Text style={styles.title}>Connexion</Text>
-                <Text style={styles.subtitle}>Reprends ton aventure</Text>
+                <Text style={styles.title}>{t('login_title')}</Text>
+                <Text style={styles.subtitle}>{t('login_subtitle')}</Text>
               </View>
 
               <View style={styles.socialStack}>
@@ -206,7 +224,7 @@ export default function LoginScreen() {
                       onPress={onApple}
                       style={({ pressed }) => [styles.socialBtn, pressed && { opacity: 0.85 }]}
                       accessibilityRole="button"
-                      accessibilityLabel="Continuer avec Apple"
+                      accessibilityLabel={t('auth_with_apple')}
                     >
                       <Ionicons name="logo-apple" size={22} color="#111827" />
                     </Pressable>
@@ -216,7 +234,7 @@ export default function LoginScreen() {
                     onPress={onGoogle}
                     style={({ pressed }) => [styles.socialBtn, pressed && { opacity: 0.85 }]}
                     accessibilityRole="button"
-                    accessibilityLabel="Continuer avec Google"
+                    accessibilityLabel={t('auth_with_google')}
                   >
                     <Ionicons name="logo-google" size={22} color="#DB4437" />
                   </Pressable>
@@ -225,20 +243,20 @@ export default function LoginScreen() {
                     onPress={onFacebook}
                     style={({ pressed }) => [styles.socialBtn, pressed && { opacity: 0.85 }]}
                     accessibilityRole="button"
-                    accessibilityLabel="Continuer avec Facebook"
+                    accessibilityLabel={t('auth_with_facebook')}
                   >
                     <Ionicons name="logo-facebook" size={22} color="#1877F2" />
                   </Pressable>
                 </View>
                 <View style={styles.dividerRow}>
                   <View style={styles.divider} />
-                  <Text style={styles.dividerText}>ou connexion par email</Text>
+                  <Text style={styles.dividerText}>{t('login_or_email')}</Text>
                   <View style={styles.divider} />
                 </View>
               </View>
 
               <View style={styles.form}>
-                <Text style={styles.label}>Email</Text>
+                <Text style={styles.label}>{t('auth_email')}</Text>
                 <TextInput
                   ref={emailRef}
                   placeholder="ton.email@mail.com"
@@ -253,7 +271,7 @@ export default function LoginScreen() {
                   onSubmitEditing={() => passwordRef.current?.focus()}
                 />
 
-                <Text style={styles.label}>Mot de passe</Text>
+                <Text style={styles.label}>{t('auth_password')}</Text>
                 <TextInput
                   ref={passwordRef}
                   placeholder="********"
@@ -275,14 +293,14 @@ export default function LoginScreen() {
                   end={{ x: 1, y: 1 }}
                   style={[styles.primaryButton, loading && { opacity: 0.88 }]}
                 >
-                  <Text style={styles.primaryText}>{loading ? 'Connexion...' : 'Se connecter'}</Text>
+                  <Text style={styles.primaryText}>{loading ? t('login_signing_in') : t('login_cta')}</Text>
                 </LinearGradient>
               </Pressable>
 
               <View style={styles.bottomRow}>
-                <Text style={styles.bottomText}>Pas encore de compte ? </Text>
+                <Text style={styles.bottomText}>{t('login_no_account')}</Text>
                 <Link href="/(auth)/register" style={styles.link}>
-                  Creer un compte
+                  {t('login_create_account')}
                 </Link>
               </View>
             </View>
@@ -295,6 +313,17 @@ export default function LoginScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 24, backgroundColor: '#ffffff', justifyContent: 'space-between' },
+  langRow: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8, marginBottom: 4 },
+  langBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+  },
+  langBtnActive: { backgroundColor: '#1D4ED8', borderColor: '#1D4ED8' },
+  langBtnText: { fontSize: 12, fontWeight: '600', color: '#6b7280' },
+  langBtnTextActive: { color: '#ffffff' },
   content: { gap: 28 },
   header: { alignItems: 'center', gap: 6 },
   title: { color: '#0f172a', fontSize: 24, fontWeight: '800' },

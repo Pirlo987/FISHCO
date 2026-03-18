@@ -17,6 +17,7 @@ import { useRouter } from 'expo-router';
 import { useAuth } from '@/providers/AuthProvider';
 import { COUNTRIES, findCountryByName, iso2ToFlag, Country } from '@/lib/countries';
 import { mergeProfileDraft, readProfileDraft } from '@/lib/profileDraft';
+import { useLanguage } from '@/providers/LanguageProvider';
 
 // Liste locale étendue de villes avec leur pays
 const LOCAL_CITIES = [
@@ -90,6 +91,7 @@ const LOCAL_CITIES = [
 ];
 
 export default function CountryStep() {
+  const { t } = useLanguage();
   const router = useRouter();
   const { session } = useAuth();
   const [cityInput, setCityInput] = React.useState('');
@@ -226,11 +228,11 @@ export default function CountryStep() {
     const cityName = cityInput.trim();
 
     if (!cityName) {
-      Alert.alert('Champ requis', 'Merci d indiquer ta ville.');
+      Alert.alert(t('onboard_country_selection_required'), t('onboard_country_req_city'));
       return;
     }
     if (!countryName) {
-      Alert.alert('Champ requis', 'Merci d indiquer ton pays de residence.');
+      Alert.alert(t('onboard_country_selection_required'), t('onboard_country_req_country'));
       return;
     }
 
@@ -240,7 +242,7 @@ export default function CountryStep() {
       if (loose) country = loose;
     }
     if (!country) {
-      Alert.alert('Selection requise', 'Choisis un pays dans la liste.');
+      Alert.alert(t('onboard_country_selection_required'), t('onboard_country_select'));
       return;
     }
 
@@ -281,31 +283,29 @@ export default function CountryStep() {
               <View style={styles.progressContainer}>
                 <View style={styles.progressBar}>
                   <LinearGradient
-                    colors={['#3B82F6', '#2563EB']}
+                    colors={['#1E3A5F', '#0F2744']}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 0 }}
                     style={styles.progressFill}
                   />
                 </View>
-                <Text style={styles.progressText}>2/6</Text>
+                <Text style={styles.progressText}>{t('onboard_country_step')}</Text>
               </View>
 
-              <Text style={styles.title}>Ville et{'\n'}pays</Text>
-              <Text style={styles.subtitle}>
-                On se rapproche de toi pour mieux personnaliser l'expérience
-              </Text>
+              <Text style={styles.title}>{t('onboard_country_title')}</Text>
+              <Text style={styles.subtitle}>{t('onboard_country_subtitle')}</Text>
             </View>
 
             <View style={styles.form}>
               {/* VILLE EN PREMIER */}
               <View style={[styles.field, showCityList && styles.fieldActive]}>
-                <Text style={styles.label}>Ville</Text>
+                <Text style={styles.label}>{t('onboard_country_city')}</Text>
                 <View style={[
                   styles.inputContainer,
                   focusedField === 'city' && styles.inputContainerFocused
                 ]}>
                   <TextInput
-                    placeholder="Ville (ex: Paris)"
+                    placeholder={t('onboard_country_city_ph')}
                     placeholderTextColor="#94A3B8"
                     color="#0f172a"
                     value={cityInput}
@@ -358,19 +358,19 @@ export default function CountryStep() {
                     </ScrollView>
                   </View>
                 )}
-                {cityLoading && <Text style={styles.loadingText}>Recherche...</Text>}
+                {cityLoading && <Text style={styles.loadingText}>{t('onboard_loading')}</Text>}
               </View>
 
               {/* PAYS EN SECOND */}
               <View style={[styles.field, showCountryList && styles.fieldActive]}>
-                <Text style={styles.label}>Pays de résidence</Text>
+                <Text style={styles.label}>{t('onboard_country_country')}</Text>
                 <View style={[
                   styles.inputContainer,
                   focusedField === 'country' && styles.inputContainerFocused
                 ]}>
                   <TextInput
                     ref={countryRef}
-                    placeholder="Pays (ex: France)"
+                    placeholder={t('onboard_country_country_ph')}
                     placeholderTextColor="#94A3B8"
                     color="#0f172a"
                     value={countryInput}
@@ -429,7 +429,7 @@ export default function CountryStep() {
                   <View style={styles.infoContent}>
                     <Text style={styles.infoIcon}>ℹ️</Text>
                     <Text style={styles.infoText}>
-                      Indicatif téléphonique : {iso2ToFlag(selectedCountry.iso2)} {selectedCountry.dialCode}
+                      {t('onboard_country_dial')} : {iso2ToFlag(selectedCountry.iso2)} {selectedCountry.dialCode}
                     </Text>
                   </View>
                 </View>
@@ -441,18 +441,18 @@ export default function CountryStep() {
             <View style={styles.buttonRow}>
               <Pressable style={styles.secondaryWrapper} onPress={() => router.back()}>
                 <View style={styles.secondaryButton}>
-                  <Text style={styles.secondaryText}>Retour</Text>
+                  <Text style={styles.secondaryText}>{t('onboard_back')}</Text>
                 </View>
               </Pressable>
-              
+
               <Pressable style={styles.primaryWrapper} onPress={onNext}>
                 <LinearGradient
-                  colors={['#3B82F6', '#2563EB']}
+                  colors={['#1E3A5F', '#0F2744']}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                   style={styles.primaryButton}
                 >
-                  <Text style={styles.primaryText}>Continuer</Text>
+                  <Text style={styles.primaryText}>{t('onboard_continue')}</Text>
                   <View style={styles.arrowWrapper}>
                     <Text style={styles.arrowIcon}>→</Text>
                   </View>
@@ -664,7 +664,7 @@ const styles = StyleSheet.create({
     flex: 1,
     borderRadius: 16,
     overflow: 'hidden',
-    shadowColor: '#3B82F6',
+    shadowColor: '#1E3A5F',
     shadowOpacity: 0.25,
     shadowRadius: 20,
     shadowOffset: { width: 0, height: 10 },

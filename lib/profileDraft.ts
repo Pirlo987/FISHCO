@@ -8,6 +8,7 @@ export type ProfileDraft = {
   firstName?: string;
   lastName?: string;
   dob?: string;
+  city?: string;
   country?: string;
   dialCode?: string;
   phone?: string;

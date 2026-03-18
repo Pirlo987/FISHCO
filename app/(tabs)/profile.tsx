@@ -7,6 +7,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '@/providers/AuthProvider';
 import { ThemedSafeArea } from '@/components/SafeArea';
 import { supabase } from '@/lib/supabase';
+import { useLanguage } from '@/providers/LanguageProvider';
 
 type ProfileRow = {
   first_name: string | null;
@@ -77,6 +78,7 @@ const urlFromCatchPhoto = (path?: string | null) => {
 };
 
 export default function ProfileScreen() {
+  const { t } = useLanguage();
   const router = useRouter();
   const { session } = useAuth();
   const [profile, setProfile] = React.useState<ProfileRow | null>(null);
@@ -176,7 +178,7 @@ export default function ProfileScreen() {
     return (
       <ThemedSafeArea>
         <View style={[styles.container, styles.center]}>
-          <Text>Connecte-toi pour voir ton profil.</Text>
+          <Text>{t('profile_login_prompt')}</Text>
         </View>
       </ThemedSafeArea>
     );
@@ -191,15 +193,15 @@ export default function ProfileScreen() {
   const dobLabel = formatDate(profile?.dob);
   const statsData = React.useMemo(
     () => [
-      { key: 'total', label: 'Total prises', value: totalCatches === null ? '—' : totalCatches },
+      { key: 'total', label: t('profile_total_catches'), value: totalCatches === null ? '—' : totalCatches },
       {
         key: 'weight',
-        label: 'Max poids',
+        label: t('profile_max_weight'),
         value: formatNumber(biggestCatch?.weight_kg) ? `${formatNumber(biggestCatch?.weight_kg)} kg` : '—',
       },
       {
         key: 'length',
-        label: 'Max taille',
+        label: t('profile_max_size'),
         value: formatNumber(longestCatch?.length_cm) ? `${formatNumber(longestCatch?.length_cm)} cm` : '—',
       },
     ],
@@ -255,15 +257,15 @@ export default function ProfileScreen() {
 
             <Pressable onPress={onOpenHistory} style={({ pressed }) => [styles.card, styles.historyCard, pressed && styles.pressedCard]}>
               <View style={styles.historyHeader}>
-                <Text style={styles.sectionTitle}>Historique</Text>
-                <Text style={styles.linkText}>Voir tout</Text>
+                <Text style={styles.sectionTitle}>{t('profile_history')}</Text>
+                <Text style={styles.linkText}>{t('profile_see_all')}</Text>
               </View>
               {recentCatches.length === 0 ? (
-                <Text style={styles.muted}>Aucune prise pour le moment.</Text>
+                <Text style={styles.muted}>{t('profile_no_catches')}</Text>
               ) : (
                 recentCatches.map((item) => {
                   const photoUrl = urlFromCatchPhoto(item.photo_path);
-                  const dateLabel = formatDate(item.caught_at) || 'Date inconnue';
+                  const dateLabel = formatDate(item.caught_at) || t('profile_unknown_date');
                   return (
                     <View key={item.id} style={styles.historyItem}>
                       {photoUrl ? (
@@ -274,7 +276,7 @@ export default function ProfileScreen() {
                         </View>
                       )}
                       <View style={{ flex: 1 }}>
-                        <Text style={styles.historyTitle}>{item.species || 'Prise'}</Text>
+                        <Text style={styles.historyTitle}>{item.species || t('profile_catch')}</Text>
                         <Text style={styles.historyMeta}>
                           {dateLabel}
                           {formatNumber(item.weight_kg) ? ` • ${formatNumber(item.weight_kg)} kg` : ''}

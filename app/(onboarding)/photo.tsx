@@ -23,8 +23,10 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import * as FileSystem from 'expo-file-system/legacy';
 import { decode } from 'base64-arraybuffer';
 import { clearProfileDraft, readProfileDraft } from '@/lib/profileDraft';
+import { useLanguage } from '@/providers/LanguageProvider';
 
 export default function PhotoStep() {
+  const { t } = useLanguage();
   const router = useRouter();
   const { session } = useAuth();
   const [image, setImage] = React.useState<ImagePicker.ImagePickerAsset | null>(null);
@@ -35,14 +37,14 @@ export default function PhotoStep() {
     if (current.granted || (Platform.OS === 'ios' && (current as any).accessPrivileges === 'limited')) return true;
     const req = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (req.granted || (Platform.OS === 'ios' && (req as any).accessPrivileges === 'limited')) return true;
-    Alert.alert('Permission requise', "Autorise l'acces a la phototheque pour selectionner une image.");
+    Alert.alert('Permission requise', t('onboard_photo_perm_library'));
     return false;
   }, []);
 
   const requestCameraPermission = React.useCallback(async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permission requise', "Autorise l'acces a la camera pour prendre une photo.");
+      Alert.alert('Permission requise', t('onboard_photo_perm_camera'));
       return false;
     }
     return true;
@@ -107,40 +109,28 @@ export default function PhotoStep() {
 
   const finalizeProfile = async (avatar: { path?: string | null; publicUrl?: string | null } | null) => {
     if (!session?.user?.id) {
-      Alert.alert('Connexion requise', 'Connecte-toi pour terminer.');
+      Alert.alert(t('onboard_login_required'), t('onboard_login_required_msg'));
       return;
     }
     const draft = await readProfileDraft(session);
     const d = draft ?? {};
-    const rowBase: any = {
+    const payload: any = {
       id: session.user.id,
       first_name: d.firstName ?? null,
       last_name: d.lastName ?? null,
       dob: d.dob ?? null,
+      city: d.city ?? null,
       country: d.country ?? null,
       level: d.level ?? null,
       username: d.username ?? null,
       updated_at: new Date().toISOString(),
     };
-    if (d.phone) rowBase.phone = d.phone;
+    if (d.phone) payload.phone = d.phone;
+    if (avatar?.publicUrl) payload.avatar_url = avatar.publicUrl;
+    if (avatar?.path) payload.avatar_path = avatar.path;
 
-    const tryUpserts: any[] = [];
-    if (avatar?.publicUrl) tryUpserts.push({ ...rowBase, avatar_url: avatar.publicUrl });
-    if (avatar?.path) tryUpserts.push({ ...rowBase, avatar_path: avatar.path });
-    if (avatar?.publicUrl) tryUpserts.push({ ...rowBase, photo_url: avatar.publicUrl });
-    if (avatar?.path) tryUpserts.push({ ...rowBase, photo_path: avatar.path });
-    if (tryUpserts.length === 0) tryUpserts.push(rowBase);
-
-    let lastErr: any = null;
-    for (const payload of tryUpserts) {
-      const { error } = await supabase.from('profiles').upsert(payload);
-      if (!error) {
-        lastErr = null;
-        break;
-      }
-      lastErr = error;
-    }
-    if (lastErr) throw lastErr;
+    const { error } = await supabase.from('profiles').upsert(payload);
+    if (error) throw error;
 
     await clearProfileDraft();
     await AsyncStorage.removeItem('profile_onboarding_pending');
@@ -151,11 +141,11 @@ export default function PhotoStep() {
 
   const onSave = async () => {
     if (!session?.user?.id) {
-      Alert.alert('Connexion requise', 'Connecte-toi pour terminer.');
+      Alert.alert(t('onboard_login_required'), t('onboard_login_required_msg'));
       return;
     }
     if (!image?.uri) {
-      Alert.alert('Photo requise', 'Ajoute une photo pour finaliser ton profil.');
+      Alert.alert(t('onboard_photo_required'), t('onboard_photo_required_msg'));
       return;
     }
     try {
@@ -207,17 +197,17 @@ export default function PhotoStep() {
                 <View style={styles.progressContainer}>
                   <View style={styles.progressBar}>
                     <LinearGradient
-                      colors={['#3B82F6', '#2563EB']}
+                      colors={['#1E3A5F', '#0F2744']}
                       start={{ x: 0, y: 0 }}
                       end={{ x: 1, y: 0 }}
                       style={styles.progressFill}
                     />
                   </View>
-                  <Text style={styles.progressText}>6/6</Text>
+                  <Text style={styles.progressText}>{t('onboard_photo_step')}</Text>
                 </View>
 
-                <Text style={styles.title}>Photo de profil</Text>
-                <Text style={styles.subtitle}>Ajoute un portrait carree, net et lumineux.</Text>
+                <Text style={styles.title}>{t('onboard_photo_title')}</Text>
+                <Text style={styles.subtitle}>{t('onboard_photo_subtitle')}</Text>
               </View>
 
               <View style={styles.form}>
@@ -226,7 +216,7 @@ export default function PhotoStep() {
                     <Image source={{ uri: image.uri }} style={styles.previewImage} contentFit="cover" />
                   ) : (
                     <View style={styles.previewPlaceholder}>
-                      <Text style={styles.previewText}>Apercu</Text>
+                      <Text style={styles.previewText}>{t('onboard_photo_preview')}</Text>
                     </View>
                   )}
                 </View>
@@ -234,12 +224,12 @@ export default function PhotoStep() {
                 <View style={styles.actionsRow}>
                   <Pressable style={[styles.secondaryWrapper, loading && styles.disabled]} onPress={onPickImage} disabled={loading}>
                     <View style={styles.secondaryButton}>
-                      <Text style={styles.secondaryText}>Choisir une photo</Text>
+                      <Text style={styles.secondaryText}>{t('onboard_photo_choose')}</Text>
                     </View>
                   </Pressable>
                   <Pressable style={[styles.secondaryWrapper, loading && styles.disabled]} onPress={onTakePhoto} disabled={loading}>
                     <View style={styles.secondaryButton}>
-                      <Text style={styles.secondaryText}>Prendre une photo</Text>
+                      <Text style={styles.secondaryText}>{t('onboard_photo_take')}</Text>
                     </View>
                   </Pressable>
                 </View>
@@ -254,9 +244,7 @@ export default function PhotoStep() {
                   <View style={styles.infoAccent} />
                   <View style={styles.infoContent}>
                     <Text style={styles.infoIcon}>⚠️</Text>
-                    <Text style={styles.infoText}>
-                      Conseil: pose comme si tu tenais le poisson de l'annee (mais evite les filtres de licorne).
-                    </Text>
+                    <Text style={styles.infoText}>{t('onboard_photo_tip')}</Text>
                   </View>
                 </View>
               </View>
@@ -270,18 +258,18 @@ export default function PhotoStep() {
                 disabled={loading}
               >
                 <View style={styles.secondaryButton}>
-                  <Text style={styles.secondaryText}>Retour</Text>
+                  <Text style={styles.secondaryText}>{t('onboard_back')}</Text>
                 </View>
               </Pressable>
 
                 <Pressable style={[styles.primaryWrapper, loading && styles.disabled]} onPress={onSave} disabled={loading}>
                   <LinearGradient
-                    colors={['#3B82F6', '#2563EB']}
+                    colors={['#1E3A5F', '#0F2744']}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 1 }}
                     style={styles.primaryButton}
                   >
-                    <Text style={styles.primaryText}>{loading ? 'Enregistrement...' : 'Terminer'}</Text>
+                    <Text style={styles.primaryText}>{loading ? t('onboard_photo_saving') : t('onboard_photo_finish')}</Text>
                     <View style={styles.arrowWrapper}>
                       <Text style={styles.arrowIcon}>{'>'}</Text>
                     </View>
@@ -437,7 +425,7 @@ const styles = StyleSheet.create({
     flex: 1,
     borderRadius: 16,
     overflow: 'hidden',
-    shadowColor: '#3B82F6',
+    shadowColor: '#1E3A5F',
     shadowOpacity: 0.25,
     shadowRadius: 20,
     shadowOffset: { width: 0, height: 10 },

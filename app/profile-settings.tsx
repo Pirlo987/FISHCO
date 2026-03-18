@@ -2,11 +2,13 @@ import React from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
+import { Link } from 'expo-router';
 
 import { ThemedSafeArea } from '@/components/SafeArea';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/lib/supabase';
 import { COUNTRIES, iso2ToFlag } from '@/lib/countries';
+import { useLanguage } from '@/providers/LanguageProvider';
 
 type ProfileRow = {
   country: string | null;
@@ -23,6 +25,7 @@ const LEVEL_LABELS: Record<string, string> = {
 };
 
 export default function ProfileSettingsScreen() {
+  const { t } = useLanguage();
   const router = useRouter();
   const { session, signOut } = useAuth();
   const [profile, setProfile] = React.useState<ProfileRow | null>(null);
@@ -73,7 +76,7 @@ export default function ProfileSettingsScreen() {
 
   const onSave = async () => {
     if (!session?.user?.id) {
-      Alert.alert('Connexion requise', 'Connecte-toi pour modifier ces informations.');
+      Alert.alert(t('settings_login_required'), t('settings_login_to_edit'));
       return;
     }
     const payload: Partial<ProfileRow> = {
@@ -121,7 +124,6 @@ export default function ProfileSettingsScreen() {
 
   const onSignOut = async () => {
     await signOut();
-    router.back();
   };
 
   return (
@@ -130,10 +132,10 @@ export default function ProfileSettingsScreen() {
         <Pressable onPress={() => router.back()} hitSlop={10} style={styles.backButton}>
           <Ionicons name="chevron-back" size={24} color="#111827" />
         </Pressable>
-        <Text style={styles.headerTitle}>Informations</Text>
+        <Text style={styles.headerTitle}>{t('settings_info')}</Text>
         <Pressable onPress={toggleEdit} hitSlop={10} style={styles.editButton}>
           <Ionicons name="create-outline" size={20} color="#111827" />
-          <Text style={styles.editText}>{readOnly ? 'Modifier les informations' : 'Annuler'}</Text>
+          <Text style={styles.editText}>{readOnly ? t('settings_edit') : t('settings_cancel')}</Text>
         </Pressable>
       </View>
       {loading ? (
@@ -142,7 +144,7 @@ export default function ProfileSettingsScreen() {
         </View>
       ) : !session ? (
         <View style={styles.loadingRow}>
-          <Text style={styles.errorText}>Connecte-toi pour consulter ces informations.</Text>
+          <Text style={styles.errorText}>{t('settings_login_prompt')}</Text>
         </View>
       ) : error ? (
         <View style={styles.loadingRow}>
@@ -151,14 +153,14 @@ export default function ProfileSettingsScreen() {
       ) : (
         <ScrollView contentContainerStyle={styles.form} keyboardShouldPersistTaps="handled">
           <View style={styles.field}>
-            <Text style={styles.fieldLabel}>Pays</Text>
+            <Text style={styles.fieldLabel}>{t('settings_country')}</Text>
             {readOnly ? (
               <Text style={styles.fieldValue}>{profile?.country || '—'}</Text>
             ) : (
               <View style={{ gap: 8 }}>
                 <TextInput
                   style={styles.input}
-                  placeholder="Ton pays"
+                  placeholder={t('settings_country_ph')}
                   value={form?.country ?? ''}
                   onFocus={() => setShowCountryList(true)}
                   onChangeText={(text) => {
@@ -188,20 +190,20 @@ export default function ProfileSettingsScreen() {
             )}
           </View>
           <View style={styles.field}>
-            <Text style={styles.fieldLabel}>Niveau</Text>
+            <Text style={styles.fieldLabel}>{t('settings_level')}</Text>
             {readOnly ? (
               <Text style={styles.fieldValue}>{levelLabel || '—'}</Text>
             ) : (
               <TextInput
                 style={styles.input}
-                placeholder={levelLabel || 'Débutant, Intermédiaire...'}
+                placeholder={levelLabel || t('settings_level_ph')}
                 value={form?.level ?? ''}
                 onChangeText={(text) => onChangeField('level', text)}
               />
             )}
           </View>
           <View style={styles.field}>
-            <Text style={styles.fieldLabel}>Téléphone</Text>
+            <Text style={styles.fieldLabel}>{t('settings_phone')}</Text>
             {readOnly ? (
               <Text style={styles.fieldValue}>{profile?.phone || '—'}</Text>
             ) : (
@@ -215,7 +217,7 @@ export default function ProfileSettingsScreen() {
             )}
           </View>
           <View style={styles.field}>
-            <Text style={styles.fieldLabel}>Date de naissance</Text>
+            <Text style={styles.fieldLabel}>{t('settings_dob')}</Text>
             {readOnly ? (
               <Text style={styles.fieldValue}>{profile?.dob || '—'}</Text>
             ) : (
@@ -226,7 +228,7 @@ export default function ProfileSettingsScreen() {
                   value={form?.dob ?? ''}
                   onChangeText={(text) => onChangeField('dob', text)}
                 />
-                <Text style={styles.fieldHint}>Format AAAA-MM-JJ (ex: 1990-05-12)</Text>
+                <Text style={styles.fieldHint}>{t('settings_dob_format')}</Text>
               </>
             )}
           </View>
@@ -234,13 +236,21 @@ export default function ProfileSettingsScreen() {
       )}
       {session && !readOnly ? (
         <Pressable onPress={onSave} style={({ pressed }) => [styles.saveButton, pressed && { opacity: 0.8 }]} disabled={saving}>
-          <Text style={styles.saveText}>{saving ? 'Enregistrement...' : 'Enregistrer'}</Text>
+          <Text style={styles.saveText}>{saving ? t('settings_saving') : t('settings_save')}</Text>
         </Pressable>
       ) : null}
       {session && readOnly ? (
-        <Pressable onPress={onSignOut} style={({ pressed }) => [styles.logoutButton, pressed && { opacity: 0.85 }]}>
-          <Text style={styles.logoutText}>Se déconnecter</Text>
-        </Pressable>
+        <View style={styles.bottomLinks}>
+          <Link href="/about" asChild>
+            <Pressable style={styles.legalBtn}>
+              <Text style={styles.legalBtnText}>{t('settings_about')}</Text>
+              <Ionicons name="chevron-forward" size={14} color="#6B7280" />
+            </Pressable>
+          </Link>
+          <Pressable onPress={onSignOut} style={({ pressed }) => [styles.logoutButton, pressed && { opacity: 0.85 }]}>
+            <Text style={styles.logoutText}>{t('settings_logout')}</Text>
+          </Pressable>
+        </View>
       ) : null}
     </ThemedSafeArea>
   );
@@ -312,6 +322,15 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   saveText: { color: '#fff', fontWeight: '700' },
+  bottomLinks: { gap: 8, marginBottom: 24 },
+  legalBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 12,
+  },
+  legalBtnText: { color: '#6B7280', fontSize: 13 },
   logoutButton: {
     backgroundColor: '#fff',
     paddingVertical: 12,
@@ -319,7 +338,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#E5E7EB',
-    marginBottom: 24,
   },
   logoutText: { color: '#B91C1C', fontWeight: '700' },
 });

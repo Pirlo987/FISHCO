@@ -10,6 +10,7 @@ import React from 'react';
 
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { AuthProvider, useAuth } from '@/providers/AuthProvider';
+import { LanguageProvider } from '@/providers/LanguageProvider';
 import { supabase } from '@/lib/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -188,6 +189,7 @@ export default function RootLayout() {
   }, [loaded, appReady]);
 
   return (
+    <LanguageProvider>
     <AuthProvider>
       <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
         <AuthGate onReady={handleAuthReady}>
@@ -205,5 +207,6 @@ export default function RootLayout() {
         <StatusBar style="dark" />
       </ThemeProvider>
     </AuthProvider>
+    </LanguageProvider>
   );
 }

@@ -1,0 +1,207 @@
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/providers/AuthProvider';
+import { awardLikeGiven, awardLikeReceived } from '@/lib/gamification';
+import type { FeedItem, CommentRow } from '@/components/community/types';
+
+export function useCommunityFeed() {
+  const { session } = useAuth();
+
+  const [feed, setFeed] = useState<FeedItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [photoRatios, setPhotoRatios] = useState<Record<string, number>>({});
+  const [likesById, setLikesById] = useState<Record<string, number>>({});
+  const [commentsById, setCommentsById] = useState<Record<string, number>>({});
+  const [likedByMe, setLikedByMe] = useState<Record<string, boolean>>({});
+  const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
+  const [commentOpen, setCommentOpen] = useState<Record<string, boolean>>({});
+  const [commentsList, setCommentsList] = useState<Record<string, CommentRow[]>>({});
+
+  const ownerByCatch = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const item of feed) {
+      if (item.id && item.user_id) map[item.id] = item.user_id;
+    }
+    return map;
+  }, [feed]);
+
+  const loadComments = useCallback(async (ids: string[]) => {
+    if (!ids.length) return {} as Record<string, CommentRow[]>;
+    const next: Record<string, CommentRow[]> = {};
+    const { data, error: cError } = await supabase
+      .from('catch_comments')
+      .select(
+        'id,catch_id,content,created_at,profiles:profiles (id,username,first_name,last_name,avatar_url,avatar_path,photo_url,photo_path)',
+      )
+      .in('catch_id', ids)
+      .order('created_at', { ascending: false });
+    if (cError) return {};
+    for (const row of (data as unknown as CommentRow[]) ?? []) {
+      const cid = row.catch_id;
+      if (!cid) continue;
+      const list = next[cid] ?? [];
+      if (list.length < 3) list.push(row);
+      next[cid] = list;
+    }
+    return next;
+  }, []);
+
+  const loadMyLikes = useCallback(
+    async (ids: string[]) => {
+      if (!session?.user?.id || !ids.length) return {} as Record<string, boolean>;
+      const { data } = await supabase
+        .from('catch_likes')
+        .select('catch_id')
+        .eq('user_id', session.user.id)
+        .in('catch_id', ids);
+      const map: Record<string, boolean> = {};
+      for (const row of data ?? []) {
+        const cid = (row as any)?.catch_id;
+        if (cid) map[cid] = true;
+      }
+      return map;
+    },
+    [session?.user?.id],
+  );
+
+  const fetchFeed = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { data, error: dbError } = await supabase
+        .from('catches')
+        .select(
+          'id,user_id,title,species,weight_kg,length_cm,region,description,photo_path,caught_at,catch_likes(count),catch_comments(count),profiles:profiles (id,username,first_name,last_name,avatar_url,avatar_path,photo_url,photo_path)',
+        )
+        .eq('is_public', true)
+        .order('caught_at', { ascending: false })
+        .limit(50);
+
+      if (dbError) throw dbError;
+      const rows = (data as unknown as FeedItem[]) ?? [];
+      setFeed(rows);
+
+      const nextLikes: Record<string, number> = {};
+      const nextComments: Record<string, number> = {};
+      for (const row of rows) {
+        nextLikes[row.id] = row.catch_likes?.[0]?.count ?? 0;
+        nextComments[row.id] = row.catch_comments?.[0]?.count ?? 0;
+      }
+      setLikesById(nextLikes);
+      setCommentsById(nextComments);
+
+      const ids = rows.map((r) => r.id);
+      const [commentMap, likedMap] = await Promise.all([
+        loadComments(ids),
+        loadMyLikes(ids),
+      ]);
+      setCommentsList(commentMap);
+      setLikedByMe(likedMap);
+    } catch (e: any) {
+      setError(e?.message ?? 'Flux indisponible');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [loadComments, loadMyLikes]);
+
+  useEffect(() => {
+    fetchFeed();
+  }, [fetchFeed]);
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    fetchFeed();
+  }, [fetchFeed]);
+
+  const toggleLike = useCallback(
+    async (catchId: string) => {
+      if (!session?.user?.id) return;
+      const currentlyLiked = likedByMe[catchId] ?? false;
+      setLikedByMe((prev) => ({ ...prev, [catchId]: !currentlyLiked }));
+      setLikesById((prev) => ({
+        ...prev,
+        [catchId]: Math.max(0, (prev[catchId] ?? 0) + (currentlyLiked ? -1 : 1)),
+      }));
+      if (currentlyLiked) {
+        await supabase
+          .from('catch_likes')
+          .delete()
+          .eq('catch_id', catchId)
+          .eq('user_id', session.user.id);
+      } else {
+        await supabase
+          .from('catch_likes')
+          .upsert({ catch_id: catchId, user_id: session.user.id });
+        awardLikeGiven(session, catchId).catch(() => {});
+        const ownerId = ownerByCatch[catchId];
+        if (ownerId && ownerId !== session.user.id) {
+          awardLikeReceived(ownerId, catchId).catch(() => {});
+        }
+      }
+    },
+    [likedByMe, ownerByCatch, session],
+  );
+
+  const submitComment = useCallback(
+    async (catchId: string) => {
+      if (!session?.user?.id) return;
+      const draft = (commentDrafts[catchId] || '').trim();
+      if (!draft) return;
+      setCommentDrafts((prev) => ({ ...prev, [catchId]: '' }));
+      const { data, error: insertError } = await supabase
+        .from('catch_comments')
+        .insert({ catch_id: catchId, user_id: session.user.id, content: draft })
+        .select(
+          'id,catch_id,content,created_at,profiles:profiles (id,username,first_name,last_name,avatar_url,avatar_path,photo_url,photo_path)',
+        )
+        .single();
+      if (!insertError && data) {
+        setCommentsList((prev) => {
+          const list = prev[catchId] ? [...prev[catchId]] : [];
+          list.unshift(data as unknown as CommentRow);
+          return { ...prev, [catchId]: list.slice(0, 3) };
+        });
+        setCommentsById((prev) => ({
+          ...prev,
+          [catchId]: (prev[catchId] ?? 0) + 1,
+        }));
+      }
+    },
+    [commentDrafts, session?.user?.id],
+  );
+
+  const onPhotoRatio = useCallback((id: string, ratio: number) => {
+    setPhotoRatios((prev) => (prev[id] ? prev : { ...prev, [id]: ratio }));
+  }, []);
+
+  const onToggleComments = useCallback((id: string) => {
+    setCommentOpen((prev) => ({ ...prev, [id]: !prev[id] }));
+  }, []);
+
+  const onDraftChange = useCallback((id: string, text: string) => {
+    setCommentDrafts((prev) => ({ ...prev, [id]: text }));
+  }, []);
+
+  return {
+    feed,
+    loading,
+    refreshing,
+    error,
+    photoRatios,
+    likesById,
+    commentsById,
+    likedByMe,
+    commentDrafts,
+    commentOpen,
+    commentsList,
+    onRefresh,
+    toggleLike,
+    submitComment,
+    onPhotoRatio,
+    onToggleComments,
+    onDraftChange,
+  } as const;
+}

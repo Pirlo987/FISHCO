@@ -9,7 +9,6 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  TouchableWithoutFeedback,
   View,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -18,8 +17,10 @@ import { useRouter } from 'expo-router';
 import { useAuth } from '@/providers/AuthProvider';
 import { ThemedSafeArea } from '@/components/SafeArea';
 import { mergeProfileDraft, readProfileDraft } from '@/lib/profileDraft';
+import { useLanguage } from '@/providers/LanguageProvider';
 
 export default function NameStep() {
+  const { t } = useLanguage();
   const router = useRouter();
   const { session } = useAuth();
   const [firstName, setFirstName] = React.useState('');
@@ -80,13 +81,13 @@ export default function NameStep() {
 
   const onNext = async () => {
     if (!firstName || !lastName || !dob) {
-      Alert.alert('Champs requis', 'Merci de remplir nom, prenom et date de naissance.');
+      Alert.alert(t('onboard_name_required'), t('onboard_name_required_msg'));
       return;
     }
-    
+
     // Vérifier le format JJ/MM/AAAA
     if (!/^\d{2}\/\d{2}\/\d{4}$/.test(dob)) {
-      Alert.alert('Format date', 'Utilise le format JJ/MM/AAAA (ex: 12/05/1990).');
+      Alert.alert(t('onboard_name_date_format'), t('onboard_name_date_format_msg'));
       return;
     }
     
@@ -128,30 +129,28 @@ export default function NameStep() {
               <View style={styles.progressContainer}>
                 <View style={styles.progressBar}>
                   <LinearGradient
-                    colors={['#3B82F6', '#2563EB']}
+                    colors={['#1E3A5F', '#0F2744']}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 0 }}
                     style={styles.progressFill}
                   />
                 </View>
-                <Text style={styles.progressText}>1/6</Text>
+                <Text style={styles.progressText}>{t('onboard_name_step')}</Text>
               </View>
 
-              <Text style={styles.title}>Informations{'\n'}personnelles</Text>
-              <Text style={styles.subtitle}>
-                Complète ton profil pour profiter pleinement de l'application
-              </Text>
+              <Text style={styles.title}>{t('onboard_name_title')}</Text>
+              <Text style={styles.subtitle}>{t('onboard_name_subtitle')}</Text>
             </View>
 
             <View style={styles.form}>
               <View style={styles.field}>
-                <Text style={styles.label}>Prénom</Text>
+                <Text style={styles.label}>{t('onboard_name_first')}</Text>
                 <View style={[
                   styles.inputContainer,
                   focusedField === 'firstName' && styles.inputContainerFocused
                 ]}>
                   <TextInput
-                    placeholder="Ton prénom"
+                    placeholder={t('onboard_name_first_ph')}
                     placeholderTextColor="#94A3B8"
                     color="#0f172a"
                     value={firstName}
@@ -168,14 +167,14 @@ export default function NameStep() {
               </View>
 
               <View style={styles.field}>
-                <Text style={styles.label}>Nom</Text>
+                <Text style={styles.label}>{t('onboard_name_last')}</Text>
                 <View style={[
                   styles.inputContainer,
                   focusedField === 'lastName' && styles.inputContainerFocused
                 ]}>
                   <TextInput
                     ref={lastNameRef}
-                    placeholder="Ton nom de famille"
+                    placeholder={t('onboard_name_last_ph')}
                     placeholderTextColor="#94A3B8"
                     color="#0f172a"
                     value={lastName}
@@ -192,14 +191,14 @@ export default function NameStep() {
               </View>
 
               <View style={styles.field}>
-                <Text style={styles.label}>Date de naissance</Text>
+                <Text style={styles.label}>{t('onboard_name_dob')}</Text>
                 <View style={[
                   styles.inputContainer,
                   focusedField === 'dob' && styles.inputContainerFocused
                 ]}>
                   <TextInput
                     ref={dobRef}
-                    placeholder="JJ/MM/AAAA"
+                    placeholder={t('onboard_name_dob_ph')}
                     placeholderTextColor="#94A3B8"
                     color="#0f172a"
                     value={dob}
@@ -219,9 +218,7 @@ export default function NameStep() {
                 <View style={styles.noteAccent} />
                 <View style={styles.noteContent}>
                   <Text style={styles.noteIcon}>🔒</Text>
-                  <Text style={styles.noteText}>
-                    Tes informations restent confidentielles et ne seront pas utilisées pour ton profil public
-                  </Text>
+                  <Text style={styles.noteText}>{t('onboard_name_private')}</Text>
                 </View>
               </View>
             </View>
@@ -230,12 +227,12 @@ export default function NameStep() {
           <View style={styles.footer}>
             <Pressable style={styles.primaryWrapper} onPress={onNext}>
               <LinearGradient
-                colors={['#3B82F6', '#2563EB']}
+                colors={['#1E3A5F', '#0F2744']}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={styles.primaryButton}
               >
-                <Text style={styles.primaryText}>Continuer</Text>
+                <Text style={styles.primaryText}>{t('onboard_continue')}</Text>
                 <View style={styles.arrowWrapper}>
                   <Text style={styles.arrowIcon}>→</Text>
                 </View>
@@ -367,7 +364,7 @@ const styles = StyleSheet.create({
   primaryWrapper: {
     borderRadius: 16,
     overflow: 'hidden',
-    shadowColor: '#3B82F6',
+    shadowColor: '#1E3A5F',
     shadowOpacity: 0.25,
     shadowRadius: 20,
     shadowOffset: { width: 0, height: 10 },

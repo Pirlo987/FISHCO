@@ -24,8 +24,10 @@ import { ThemedSafeArea } from '@/components/SafeArea';
 import { supabase } from '@/lib/supabase';
 import { useGoogleAuth } from '@/hooks/useGoogleAuth';
 import { useFacebookAuth } from '@/hooks/useFacebookAuth';
+import { useLanguage } from '@/providers/LanguageProvider';
 
 export default function RegisterScreen() {
+  const { t } = useLanguage();
   const router = useRouter();
   const emailRef = React.useRef<TextInput>(null);
   const passwordRef = React.useRef<TextInput>(null);
@@ -100,21 +102,21 @@ export default function RegisterScreen() {
 
   const onRegister = async () => {
     if (!email || !password) {
-      Alert.alert('Champs requis', 'Email et mot de passe sont requis.');
+      Alert.alert(t('auth_required_fields'), t('login_email_required'));
       return;
     }
     setLoading(true);
     const { data, error } = await supabase.auth.signUp({ email, password });
     setLoading(false);
     if (error) {
-      Alert.alert('Inscription echouee', error.message);
+      Alert.alert(t('register_failed'), error.message);
       return;
     }
     await AsyncStorage.setItem('profile_onboarding_pending', '1');
     if (!data.session) {
       Alert.alert(
-        'Verification requise',
-        'Verifie tes emails pour confirmer ton compte. Tu pourras terminer le profil apres connexion.'
+        t('register_verify_title'),
+        t('register_verify_msg')
       );
     }
     router.replace('/(onboarding)/name');
@@ -131,7 +133,7 @@ export default function RegisterScreen() {
       if (err?.message?.includes('annulee')) {
         return;
       }
-      Alert.alert('Inscription Google echouee', err?.message || 'Reessaie dans quelques instants.');
+      Alert.alert(t('register_google_failed'), err?.message || t('auth_retry'));
     } finally {
       setLoading(false);
     }
@@ -145,7 +147,7 @@ export default function RegisterScreen() {
       if (err?.message?.includes('annulee')) {
         return;
       }
-      Alert.alert('Inscription Facebook echouee', err?.message || 'Reessaie dans quelques instants.');
+      Alert.alert(t('register_facebook_failed'), err?.message || t('auth_retry'));
     } finally {
       setLoading(false);
     }
@@ -166,7 +168,7 @@ export default function RegisterScreen() {
       });
 
       if (!credential.identityToken) {
-        throw new Error('Token Apple non fourni.');
+        throw new Error(t('login_apple_token'));
       }
 
       const { data, error } = await supabase.auth.signInWithIdToken({
@@ -182,7 +184,7 @@ export default function RegisterScreen() {
       if (err?.code === 'ERR_REQUEST_CANCELED' || err?.code === 'ERR_CANCELED') {
         return;
       }
-      Alert.alert('Inscription Apple echouee', err?.message || 'Reessaie dans quelques instants.');
+      Alert.alert(t('register_apple_failed'), err?.message || t('auth_retry'));
     } finally {
       setLoading(false);
     }
@@ -195,8 +197,8 @@ export default function RegisterScreen() {
           <Animated.View style={[styles.container, { transform: [{ translateY: keyboardAnim }] }]}>
             <View style={styles.content}>
               <View style={styles.header}>
-                <Text style={styles.title}>Creer un compte</Text>
-                <Text style={styles.subtitle}>Rejoins l'aventure FishBook</Text>
+                <Text style={styles.title}>{t('register_title')}</Text>
+                <Text style={styles.subtitle}>{t('register_subtitle')}</Text>
               </View>
 
               <View style={styles.socialStack}>
@@ -207,7 +209,7 @@ export default function RegisterScreen() {
                       onPress={onApple}
                       style={({ pressed }) => [styles.socialBtn, pressed && { opacity: 0.85 }]}
                       accessibilityRole="button"
-                      accessibilityLabel="Continuer avec Apple"
+                      accessibilityLabel={t('auth_with_apple')}
                     >
                       <Ionicons name="logo-apple" size={22} color="#111827" />
                     </Pressable>
@@ -217,7 +219,7 @@ export default function RegisterScreen() {
                     onPress={onGoogle}
                     style={({ pressed }) => [styles.socialBtn, pressed && { opacity: 0.85 }]}
                     accessibilityRole="button"
-                    accessibilityLabel="Continuer avec Google"
+                    accessibilityLabel={t('auth_with_google')}
                   >
                     <Ionicons name="logo-google" size={22} color="#DB4437" />
                   </Pressable>
@@ -226,20 +228,20 @@ export default function RegisterScreen() {
                     onPress={onFacebook}
                     style={({ pressed }) => [styles.socialBtn, pressed && { opacity: 0.85 }]}
                     accessibilityRole="button"
-                    accessibilityLabel="Continuer avec Facebook"
+                    accessibilityLabel={t('auth_with_facebook')}
                   >
                     <Ionicons name="logo-facebook" size={22} color="#1877F2" />
                   </Pressable>
                 </View>
                 <View style={styles.dividerRow}>
                   <View style={styles.divider} />
-                  <Text style={styles.dividerText}>ou inscription par email</Text>
+                  <Text style={styles.dividerText}>{t('register_or_email')}</Text>
                   <View style={styles.divider} />
                 </View>
               </View>
 
               <View style={styles.form}>
-                <Text style={styles.label}>Email</Text>
+                <Text style={styles.label}>{t('auth_email')}</Text>
                 <TextInput
                   ref={emailRef}
                   placeholder="ton.email@mail.com"
@@ -254,7 +256,7 @@ export default function RegisterScreen() {
                   onSubmitEditing={() => passwordRef.current?.focus()}
                 />
 
-                <Text style={styles.label}>Mot de passe (min 6)</Text>
+                <Text style={styles.label}>{t('auth_password_min')}</Text>
                 <TextInput
                   ref={passwordRef}
                   placeholder="********"
@@ -276,14 +278,14 @@ export default function RegisterScreen() {
                   end={{ x: 1, y: 1 }}
                   style={[styles.primaryButton, loading && { opacity: 0.88 }]}
                 >
-                  <Text style={styles.primaryText}>{loading ? 'Inscription...' : "Creer un compte"}</Text>
+                  <Text style={styles.primaryText}>{loading ? t('register_registering') : t('register_cta')}</Text>
                 </LinearGradient>
               </Pressable>
 
               <View style={styles.bottomRow}>
-                <Text style={styles.bottomText}>Deja inscrit ? </Text>
+                <Text style={styles.bottomText}>{t('register_already')}</Text>
                 <Link href="/(auth)/login" style={styles.link}>
-                  Se connecter
+                  {t('register_login_link')}
                 </Link>
               </View>
             </View>

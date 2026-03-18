@@ -10,6 +10,7 @@ import { supabase } from '@/lib/supabase';
 import { ThemedText } from '@/components/ThemedText';
 import WorldMiniMap from '@/components/WorldMiniMap';
 import { normalizeName } from '@/constants/species';
+import { useLanguage } from '@/providers/LanguageProvider';
 
 type CatchItem = {
   id: string;
@@ -25,6 +26,7 @@ type CatchItem = {
 };
 
 export default function CatchDetailScreen() {
+  const { t } = useLanguage();
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -59,13 +61,13 @@ export default function CatchDetailScreen() {
           .limit(1)
           .maybeSingle();
         if (error) throw error;
-        if (!data) throw new Error('Prise introuvable');
+        if (!data) throw new Error(t('catch_not_found'));
         if (cancelled) return;
         setItem(data as CatchItem);
         const url = await urlFromPhotoPath((data as CatchItem).photo_path);
         if (!cancelled) setPhotoUrl(url);
       } catch (e: any) {
-        if (!cancelled) setError(e?.message || 'Erreur de chargement');
+        if (!cancelled) setError(e?.message || t('catch_loading_error'));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -123,29 +125,29 @@ export default function CatchDetailScreen() {
 
         <View style={styles.statsCard}>
           <View style={styles.statItem}>
-            <Text style={styles.statLabel}>Poids</Text>
+            <Text style={styles.statLabel}>{t('catch_weight')}</Text>
             <Text style={styles.statValue}>{item.weight_kg ? `${Number(item.weight_kg.toFixed(2))} kg` : '—'}</Text>
           </View>
           <View style={styles.statItem}>
-            <Text style={styles.statLabel}>Taille</Text>
+            <Text style={styles.statLabel}>{t('catch_size')}</Text>
             <Text style={styles.statValue}>{item.length_cm ? `${Math.round(item.length_cm)} cm` : '—'}</Text>
           </View>
           <View style={styles.statItem}>
-            <Text style={styles.statLabel}>Date</Text>
+            <Text style={styles.statLabel}>{t('catch_date')}</Text>
             <Text style={styles.statValueSmall}>{new Date(item.caught_at).toLocaleDateString()}</Text>
           </View>
         </View>
 
         {item.notes ? (
-          <View style={styles.section}> 
-            <Text style={styles.sectionLabel}>Leurre</Text>
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>{t('catch_lure')}</Text>
             <Text style={styles.sectionText}>{item.notes}</Text>
           </View>
         ) : null}
 
         {item.region ? (
-          <View style={styles.section}> 
-            <Text style={styles.sectionLabel}>Lieu</Text>
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>{t('catch_location')}</Text>
             <Text style={styles.sectionText}>{item.region}</Text>
             <WorldMiniMap tags={[item.region]} height={140} />
           </View>

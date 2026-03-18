@@ -8,11 +8,13 @@ import {
   Text,
   View,
 } from 'react-native';
+import { Image } from 'expo-image';
+import { useRouter } from 'expo-router';
+
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/AuthProvider';
-import { Image } from 'expo-image';
 import { ThemedSafeArea } from '@/components/SafeArea';
-import { useRouter } from 'expo-router';
+import { useLanguage } from '@/providers/LanguageProvider';
 
 type Catch = {
   id: string;
@@ -21,11 +23,53 @@ type Catch = {
   length_cm: number | null;
   notes: string | null;
   caught_at: string;
-  photo_path: string | null;   // … on utilise le chemin Storage
+  photo_path: string | null;
   region?: string | null;
 };
 
+// Row height must match styles.row total height for getItemLayout to work
+const ROW_HEIGHT = 96; // padding 16*2 + image 64
+
+const urlFromPhotoPath = (path?: string | null) => {
+  if (!path) return null;
+  const { data } = supabase.storage.from('catch-photos').getPublicUrl(path);
+  return data.publicUrl ?? null;
+};
+
+type RowProps = { item: Catch; onPress: (id: string) => void };
+
+const CatchRow = React.memo(function CatchRow({ item, onPress }: RowProps) {
+  const { t } = useLanguage();
+  const url = urlFromPhotoPath(item.photo_path);
+  return (
+    <Pressable onPress={() => onPress(item.id)}>
+      <View style={styles.row}>
+        {url ? (
+          <Image source={{ uri: url }} style={styles.thumb} contentFit="cover" />
+        ) : (
+          <View style={[styles.thumb, styles.thumbEmpty]} />
+        )}
+        <View style={styles.info}>
+          <Text style={styles.species}>{item.species}</Text>
+          <Text style={styles.meta}>
+            {new Date(item.caught_at).toLocaleString()}
+            {item.weight_kg ? ` · ${item.weight_kg} kg` : ''}
+            {item.length_cm ? ` · ${item.length_cm} cm` : ''}
+          </Text>
+          {item.region ? (
+            <Text numberOfLines={1} style={styles.location}>{t('history_location')}{item.region}</Text>
+          ) : null}
+          {item.notes ? (
+            <Text numberOfLines={2} style={styles.notes}>{t('history_lure')}{item.notes}</Text>
+          ) : null}
+        </View>
+      </View>
+    </Pressable>
+  );
+});
+
 export default function HistoryScreen() {
+  const { t } = useLanguage();
   const router = useRouter();
   const { session } = useAuth();
   const [data, setData] = React.useState<Catch[]>([]);
@@ -34,13 +78,13 @@ export default function HistoryScreen() {
 
   const fetchData = React.useCallback(async () => {
     if (!session) return;
-    const { data, error } = await supabase
+    const { data: rows, error } = await supabase
       .from('catches')
-      .select('*')
+      .select('id,species,weight_kg,length_cm,notes,caught_at,photo_path,region')
       .eq('user_id', session.user.id)
       .order('caught_at', { ascending: false });
 
-    if (!error && data) setData(data as unknown as Catch[]);
+    if (!error && rows) setData(rows as unknown as Catch[]);
     setLoading(false);
   }, [session]);
 
@@ -48,18 +92,28 @@ export default function HistoryScreen() {
     fetchData();
   }, [fetchData]);
 
-  const onRefresh = async () => {
+  const onRefresh = React.useCallback(async () => {
     setRefreshing(true);
     await fetchData();
     setRefreshing(false);
-  };
+  }, [fetchData]);
 
-  // Bucket PUBLIC -> URL directe
-  const urlFromPhotoPath = (path?: string | null) => {
-    if (!path) return null;
-    const { data } = supabase.storage.from('catch-photos').getPublicUrl(path);
-    return data.publicUrl ?? null;
-  };
+  const handlePress = React.useCallback(
+    (id: string) => router.push({ pathname: '/catches/[id]', params: { id } }),
+    [router],
+  );
+
+  const keyExtractor = React.useCallback((item: Catch) => item.id, []);
+
+  const renderItem = React.useCallback(
+    ({ item }: { item: Catch }) => <CatchRow item={item} onPress={handlePress} />,
+    [handlePress],
+  );
+
+  const getItemLayout = React.useCallback(
+    (_: any, index: number) => ({ length: ROW_HEIGHT, offset: ROW_HEIGHT * index, index }),
+    [],
+  );
 
   if (loading) {
     return (
@@ -72,50 +126,22 @@ export default function HistoryScreen() {
   return (
     <ThemedSafeArea>
       <FlatList
-        contentContainerStyle={data.length === 0 && styles.flexGrow}
+        contentContainerStyle={data.length === 0 ? styles.flexGrow : undefined}
         data={data}
-        keyExtractor={(item) => item.id}
+        keyExtractor={keyExtractor}
+        renderItem={renderItem}
+        getItemLayout={getItemLayout}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-        ListEmptyComponent={() => (
+        showsVerticalScrollIndicator={false}
+        removeClippedSubviews
+        maxToRenderPerBatch={10}
+        windowSize={11}
+        ListEmptyComponent={
           <View style={styles.center}>
-            <Text>Aucune prise pour le moment.</Text>
-            <Text>Ajoute ta première depuis l'onglet "Ajouter".</Text>
+            <Text>{t('history_no_catches')}</Text>
+            <Text>{t('history_add_first')}</Text>
           </View>
-        )}
-        renderItem={({ item }) => {
-          const url = urlFromPhotoPath(item.photo_path);
-          return (
-            <Pressable
-              onPress={() =>
-                router.push({ pathname: '/catches/[id]', params: { id: item.id } })
-              }
-            >
-              <View style={styles.row}>
-                {url ? (
-                  <Image source={{ uri: url }} style={styles.thumb} contentFit="cover" />
-                ) : null}
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.species}>{item.species}</Text>
-                  <Text style={styles.meta}>
-                    {new Date(item.caught_at).toLocaleString()}
-                    {item.weight_kg ? ` · ${item.weight_kg} kg` : ''}
-                    {item.length_cm ? ` · ${item.length_cm} cm` : ''}
-                  </Text>
-                  {item.region ? (
-                    <Text numberOfLines={1} style={styles.location}>
-                      Lieu : {item.region}
-                    </Text>
-                  ) : null}
-                  {item.notes ? (
-                    <Text numberOfLines={2} style={styles.notes}>
-                      Leurre : {item.notes}
-                    </Text>
-                  ) : null}
-                </View>
-              </View>
-            </Pressable>
-          );
-        }}
+        }
       />
     </ThemedSafeArea>
   );
@@ -125,16 +151,20 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 16 },
   flexGrow: { flexGrow: 1 },
   row: {
+    height: ROW_HEIGHT,
     padding: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderColor: '#ddd',
     backgroundColor: 'white',
     gap: 12,
     flexDirection: 'row',
+    alignItems: 'center',
   },
+  info: { flex: 1 },
   species: { fontWeight: '600', fontSize: 16 },
   meta: { color: '#666', marginTop: 2 },
   location: { color: '#374151', marginTop: 6 },
   notes: { marginTop: 4, color: '#374151' },
   thumb: { width: 64, height: 64, borderRadius: 8, backgroundColor: '#eee' },
+  thumbEmpty: { backgroundColor: '#F3F4F6' },
 });

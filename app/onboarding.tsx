@@ -4,6 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 
 import { ThemedSafeArea } from '@/components/SafeArea';
+import { useLanguage } from '@/providers/LanguageProvider';
 
 const slides = [
   {
@@ -13,6 +14,7 @@ const slides = [
 ];
 
 export default function OnboardingScreen() {
+  const { t } = useLanguage();
   const router = useRouter();
   const { width, height } = Dimensions.get('window');
 
@@ -41,12 +43,12 @@ export default function OnboardingScreen() {
         <View style={styles.content}>
           <View style={styles.textBlock}>
             <Text style={styles.heroTitle}>FishBook</Text>
-            <Text style={styles.heroSubtitle}>L'endroit des pêcheurs</Text>
+            <Text style={styles.heroSubtitle}>{t('onboarding_tagline')}</Text>
           </View>
 
           <View style={styles.ctaArea}>
             <Pressable style={styles.primaryButton} onPress={() => router.replace('/(auth)/register')}>
-              <Text style={styles.primaryText}>Creer un compte</Text>
+              <Text style={styles.primaryText}>{t('onboarding_start')}</Text>
             </Pressable>
             <Pressable onPress={() => router.replace('/(auth)/login')} style={styles.secondaryButton}>
               <Text style={styles.secondaryText}>Se connecter</Text>

@@ -32,12 +32,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  const signOut = async () => {
+  const signOut = React.useCallback(async () => {
     await supabase.auth.signOut();
-  };
+  }, []);
+
+  const value = React.useMemo(
+    () => ({ session, initialized, signOut }),
+    [session, initialized, signOut],
+  );
 
   return (
-    <AuthContext.Provider value={{ session, initialized, signOut }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );

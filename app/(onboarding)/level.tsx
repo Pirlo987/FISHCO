@@ -14,6 +14,7 @@ import { useRouter } from 'expo-router';
 import { ThemedSafeArea } from '@/components/SafeArea';
 import { useAuth } from '@/providers/AuthProvider';
 import { mergeProfileDraft, readProfileDraft } from '@/lib/profileDraft';
+import { useLanguage } from '@/providers/LanguageProvider';
 
 // Persist values as backend-friendly slugs required by the `profiles_level_check` constraint.
 const LEVELS = [
@@ -32,6 +33,7 @@ const normalize = (value: string) =>
     .toLowerCase();
 
 export default function LevelStep() {
+  const { t } = useLanguage();
   const router = useRouter();
   const { session } = useAuth();
   const [level, setLevel] = React.useState<LevelValue | null>(null);
@@ -63,14 +65,14 @@ export default function LevelStep() {
 
   const onSave = async () => {
     if (!level) {
-      Alert.alert('Sélection requise', 'Choisis ton niveau de pêche.');
+      Alert.alert(t('onboard_level_required'), t('onboard_level_required_msg'));
       return;
     }
     setSubmitting(true);
     try {
       await mergeProfileDraft(session, { level });
       if (!session?.user?.id) {
-        Alert.alert('Connexion requise', 'Connecte-toi pour continuer.');
+        Alert.alert(t('onboard_login_required'), t('onboard_login_required_msg'));
         router.replace('/(auth)/login');
         return;
       }
@@ -108,24 +110,24 @@ export default function LevelStep() {
               <View style={styles.progressContainer}>
                 <View style={styles.progressBar}>
                   <LinearGradient
-                    colors={['#3B82F6', '#2563EB']}
+                    colors={['#1E3A5F', '#0F2744']}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 0 }}
                     style={styles.progressFill}
                   />
                 </View>
-                <Text style={styles.progressText}>4/6</Text>
+                <Text style={styles.progressText}>{t('onboard_level_step')}</Text>
               </View>
 
-              <Text style={styles.title}>Ton niveau{'\n'}de pêche</Text>
-              <Text style={styles.subtitle}>
-                Choisis l'option qui te correspond le mieux
-              </Text>
+              <Text style={styles.title}>{t('onboard_level_title')}</Text>
+              <Text style={styles.subtitle}>{t('onboard_level_subtitle')}</Text>
             </View>
 
             <View style={styles.form}>
               {LEVELS.map((item) => {
                 const isSelected = level === item.value;
+                const labelKey = `onboard_level_${item.value}` as Parameters<typeof t>[0];
+                const descKey = `onboard_level_${item.value}_desc` as Parameters<typeof t>[0];
                 return (
                   <Pressable
                     key={item.value}
@@ -142,13 +144,13 @@ export default function LevelStep() {
                           styles.levelLabel,
                           isSelected && styles.levelLabelSelected
                         ]}>
-                          {item.label}
+                          {t(labelKey)}
                         </Text>
                         <Text style={[
                           styles.levelDescription,
                           isSelected && styles.levelDescriptionSelected
                         ]}>
-                          {item.description}
+                          {t(descKey)}
                         </Text>
                       </View>
                     </View>
@@ -165,29 +167,29 @@ export default function LevelStep() {
 
           <View style={styles.footer}>
             <View style={styles.buttonRow}>
-              <Pressable 
-                style={styles.secondaryWrapper} 
+              <Pressable
+                style={styles.secondaryWrapper}
                 onPress={() => router.back()}
                 disabled={submitting}
               >
                 <View style={styles.secondaryButton}>
-                  <Text style={styles.secondaryText}>Retour</Text>
+                  <Text style={styles.secondaryText}>{t('onboard_back')}</Text>
                 </View>
               </Pressable>
-              
-              <Pressable 
-                style={styles.primaryWrapper} 
+
+              <Pressable
+                style={styles.primaryWrapper}
                 onPress={onSave}
                 disabled={submitting}
               >
                 <LinearGradient
-                  colors={['#3B82F6', '#2563EB']}
+                  colors={['#1E3A5F', '#0F2744']}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                   style={styles.primaryButton}
                 >
                   <Text style={styles.primaryText}>
-                    {submitting ? 'Chargement…' : 'Continuer'}
+                    {submitting ? t('onboard_loading') : t('onboard_continue')}
                   </Text>
                   {!submitting && (
                     <View style={styles.arrowWrapper}>
@@ -353,7 +355,7 @@ const styles = StyleSheet.create({
     flex: 1,
     borderRadius: 16,
     overflow: 'hidden',
-    shadowColor: '#3B82F6',
+    shadowColor: '#1E3A5F',
     shadowOpacity: 0.25,
     shadowRadius: 20,
     shadowOffset: { width: 0, height: 10 },

@@ -155,11 +155,15 @@ export default function SpeciesDetailScreen() {
       setRecord(null);
       try {
         const q = (initialName || slug).replace(/%/g, '');
-        // Try to find best match via multiple columns
+        // First try a targeted filter on known name columns (much cheaper than loading 1000 rows)
+        const safe = q.replace(/'/g, "''");
         const { data, error } = await supabase
           .from('species')
           .select('*')
-          .limit(1000);
+          .or(
+            `name.ilike.%${safe}%,french_name.ilike.%${safe}%,english_name.ilike.%${safe}%`
+          )
+          .limit(20);
 
         if (error) throw error;
 

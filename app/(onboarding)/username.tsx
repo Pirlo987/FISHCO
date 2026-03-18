@@ -18,8 +18,10 @@ import { ThemedSafeArea } from '@/components/SafeArea';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/lib/supabase';
 import { mergeProfileDraft, readProfileDraft } from '@/lib/profileDraft';
+import { useLanguage } from '@/providers/LanguageProvider';
 
 export default function UsernameStep() {
+  const { t } = useLanguage();
   const router = useRouter();
   const { session } = useAuth();
   const [username, setUsername] = React.useState('');
@@ -47,11 +49,11 @@ export default function UsernameStep() {
   const onFinish = async () => {
     const trimmed = username.trim();
     if (!trimmed) {
-      Alert.alert('Champ requis', 'Choisis un pseudo.');
+      Alert.alert(t('onboard_username_required'), t('onboard_username_required_msg'));
       return;
     }
     if (!validateUsername(trimmed)) {
-      Alert.alert('Pseudo invalide', '3-20 caracteres, lettres, chiffres, _ et .');
+      Alert.alert(t('onboard_username_invalid'), t('onboard_username_invalid_msg'));
       return;
     }
 
@@ -59,7 +61,7 @@ export default function UsernameStep() {
     try {
       if (!session?.user?.id) {
         await mergeProfileDraft(session, { username: trimmed });
-        Alert.alert('Connexion requise', 'Connecte-toi pour continuer.');
+        Alert.alert(t('onboard_login_required'), t('onboard_login_required_msg'));
         router.replace('/(auth)/login');
         return;
       }
@@ -76,7 +78,7 @@ export default function UsernameStep() {
         );
       }
       if (matches && matches.length > 0 && matches[0]?.id !== session.user.id) {
-        Alert.alert('Pseudo deja pris', 'Merci den choisir un autre.');
+        Alert.alert(t('onboard_username_taken'), t('onboard_username_taken_msg'));
         setSubmitting(false);
         return;
       }
@@ -84,7 +86,7 @@ export default function UsernameStep() {
       await mergeProfileDraft(session, { username: trimmed });
       router.push('/(onboarding)/photo');
     } catch (e: any) {
-      Alert.alert('Validation impossible', String(e?.message || e));
+      Alert.alert(t('onboard_username_validation_failed'), String(e?.message || e));
     } finally {
       setSubmitting(false);
     }
@@ -118,23 +120,23 @@ export default function UsernameStep() {
                 <View style={styles.progressContainer}>
                   <View style={styles.progressBar}>
                     <LinearGradient
-                      colors={['#3B82F6', '#2563EB']}
+                      colors={['#1E3A5F', '#0F2744']}
                       start={{ x: 0, y: 0 }}
                       end={{ x: 1, y: 0 }}
                       style={styles.progressFill}
                     />
                   </View>
-                  <Text style={styles.progressText}>5/6</Text>
+                  <Text style={styles.progressText}>{t('onboard_username_step')}</Text>
                 </View>
 
-                <Text style={styles.title}>Choisis ton pseudo</Text>
-                <Text style={styles.subtitle}>Unique, simple a retenir, et sans espace.</Text>
+                <Text style={styles.title}>{t('onboard_username_title')}</Text>
+                <Text style={styles.subtitle}>{t('onboard_username_subtitle')}</Text>
               </View>
 
               <View style={styles.form}>
                 <View style={[styles.inputContainer, focused && styles.inputContainerFocused]}>
                   <TextInput
-                    placeholder="Pseudo (ex: pecheur34)"
+                    placeholder={t('onboard_username_ph')}
                     placeholderTextColor="#94A3B8"
                     color="#0f172a"
                     autoCapitalize="none"
@@ -159,9 +161,7 @@ export default function UsernameStep() {
                   <View style={styles.infoAccent} />
                   <View style={styles.infoContent}>
                     <Text style={styles.infoIcon}>⚠️</Text>
-                    <Text style={styles.infoText}>
-                      Ce pseudo sera visible sur FishBook et ne pourra pas etre modifie par la suite.
-                    </Text>
+                    <Text style={styles.infoText}>{t('onboard_username_warning')}</Text>
                   </View>
                 </View>
               </View>
@@ -171,18 +171,18 @@ export default function UsernameStep() {
               <View style={styles.buttonRow}>
                 <Pressable style={styles.secondaryWrapper} onPress={() => router.back()} disabled={submitting}>
                   <View style={styles.secondaryButton}>
-                    <Text style={styles.secondaryText}>Retour</Text>
+                    <Text style={styles.secondaryText}>{t('onboard_back')}</Text>
                   </View>
                 </Pressable>
 
                 <Pressable style={styles.primaryWrapper} onPress={onFinish} disabled={submitting}>
                   <LinearGradient
-                    colors={['#3B82F6', '#2563EB']}
+                    colors={['#1E3A5F', '#0F2744']}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 1 }}
                     style={[styles.primaryButton, submitting && { opacity: 0.85 }]}
                   >
-                    <Text style={styles.primaryText}>{submitting ? 'Verification...' : 'Continuer'}</Text>
+                    <Text style={styles.primaryText}>{submitting ? t('onboard_username_verifying') : t('onboard_continue')}</Text>
                     <View style={styles.arrowWrapper}>
                       <Text style={styles.arrowIcon}>→</Text>
                     </View>
@@ -331,7 +331,7 @@ const styles = StyleSheet.create({
     flex: 1,
     borderRadius: 16,
     overflow: 'hidden',
-    shadowColor: '#3B82F6',
+    shadowColor: '#1E3A5F',
     shadowOpacity: 0.25,
     shadowRadius: 20,
     shadowOffset: { width: 0, height: 10 },

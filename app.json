@@ -10,9 +10,15 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.fishbook.app",
+      "buildNumber": "1",
       "usesAppleSignIn": true,
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSCameraUsageDescription": "FishBook utilise l'appareil photo pour photographier tes prises et identifier les espèces.",
+        "NSPhotoLibraryUsageDescription": "FishBook accède à ta bibliothèque de photos pour ajouter des images à tes prises.",
+        "NSPhotoLibraryAddOnlyUsageDescription": "FishBook peut enregistrer des photos dans ta bibliothèque.",
+        "NSLocationWhenInUseUsageDescription": "FishBook utilise ta position pour afficher la météo locale et enregistrer le lieu de tes prises.",
+        "NSMicrophoneUsageDescription": "FishBook peut utiliser le microphone pour certaines fonctionnalités vidéo futures."
       }
     },
     "android": {
@@ -22,8 +28,14 @@
       },
       "edgeToEdgeEnabled": true,
       "package": "com.fishbook.app",
+      "versionCode": 1,
       "permissions": [
-        "android.permission.RECORD_AUDIO"
+        "android.permission.CAMERA",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.INTERNET"
       ]
     },
     "web": {
@@ -33,7 +45,19 @@
     },
     "plugins": [
       "expo-router",
-      "expo-image-picker",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "FishBook accède à ta bibliothèque de photos pour ajouter des images à tes prises.",
+          "cameraPermission": "FishBook utilise l'appareil photo pour photographier tes prises et identifier les espèces."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "FishBook utilise ta position pour afficher la météo locale et enregistrer le lieu de tes prises."
+        }
+      ],
       [
         "expo-splash-screen",
         {

@@ -12,8 +12,10 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
+import { setStatusBarStyle } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { events } from '@/lib/events';
 
 import { supabase } from '@/lib/supabase';
@@ -22,13 +24,22 @@ import { FISH_SPECIES, normalizeName, type Species } from '@/constants/species';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedSafeArea } from '@/components/SafeArea';
 import { ThemedText } from '@/components/ThemedText';
+import { useLanguage } from '@/providers/LanguageProvider';
 
 type CatchRow = { species: string | null; photo_path: string | null; [key: string]: any };
 
 export default function ExploreScreen() {
+  const { t } = useLanguage();
   const router = useRouter();
   const { session } = useAuth();
-  const insets = useSafeAreaInsets();
+  useSafeAreaInsets();
+
+  useFocusEffect(
+    React.useCallback(() => {
+      setStatusBarStyle('light');
+      return () => setStatusBarStyle('dark');
+    }, [])
+  );
   const listRef = React.useRef<FlatList<Species> | null>(null);
   const [search, setSearch] = React.useState('');
   const [loading, setLoading] = React.useState(true);
@@ -46,7 +57,7 @@ export default function ExploreScreen() {
   const rowHeight = React.useMemo(() => tileW + 12 + 28, [tileW]);
 
   const SPECIES_BUCKET = process.env.EXPO_PUBLIC_SPECIES_BUCKET as string | undefined;
-  const HEADER_COLOR = '#DBEAFE';
+  const HEADER_COLOR = '#0F172A';
 
   const normalizeStatus = (value: any) => {
     if (value === null || value === undefined) return null;
@@ -246,11 +257,6 @@ export default function ExploreScreen() {
   }, [fetchDiscovered, router, setSearch, setDiscoveredFilter, setWaterFilter]);
 
   const [speciesList, setSpeciesList] = React.useState<Species[]>([]);
-  const PAGE_SIZE = 60;
-  const [pageIndex, setPageIndex] = React.useState(0);
-  const [hasMore, setHasMore] = React.useState(false);
-  const [loadingPage, setLoadingPage] = React.useState(false);
-  const fetchSpeciesPage = React.useCallback((_page: number) => {}, []);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -416,7 +422,7 @@ export default function ExploreScreen() {
   }, [scrollTarget, filtered, rowHeight]);
 
   const getItemLayout = React.useCallback(
-    (_: Species[] | null | undefined, index: number) => {
+    (_: ArrayLike<Species> | null | undefined, index: number) => {
       const row = Math.floor(index / 3);
       return { index, length: rowHeight, offset: row * rowHeight };
     },
@@ -455,7 +461,7 @@ export default function ExploreScreen() {
           <View style={styles.searchContainer}>
             <Ionicons name="search-outline" size={20} color="#94A3B8" style={styles.searchIcon} />
             <TextInput
-              placeholder="Rechercher une espece..."
+              placeholder={t('explore_search_ph')}
               value={search}
               onChangeText={setSearch}
               style={styles.searchInput}
@@ -483,7 +489,7 @@ export default function ExploreScreen() {
               <Ionicons
                 name={discoveredFilter === 'discovered' ? 'checkmark-circle' : 'checkmark-circle-outline'}
                 size={16}
-                color={discoveredFilter === 'discovered' ? '#FFFFFF' : '#64748B'}
+                color={discoveredFilter === 'discovered' ? '#0F172A' : 'rgba(255,255,255,0.75)'}
               />
               <Text style={[styles.chipText, discoveredFilter === 'discovered' && styles.chipTextActive]}>
                 Decouverts
@@ -497,7 +503,7 @@ export default function ExploreScreen() {
               <Ionicons
                 name={discoveredFilter === 'undiscovered' ? 'help-circle' : 'help-circle-outline'}
                 size={16}
-                color={discoveredFilter === 'undiscovered' ? '#FFFFFF' : '#64748B'}
+                color={discoveredFilter === 'undiscovered' ? '#0F172A' : 'rgba(255,255,255,0.75)'}
               />
               <Text style={[styles.chipText, discoveredFilter === 'undiscovered' && styles.chipTextActive]}>
                 A decouvrir
@@ -511,7 +517,7 @@ export default function ExploreScreen() {
               <Ionicons
                 name={waterFilter === 'fresh' ? 'water' : 'water-outline'}
                 size={16}
-                color={waterFilter === 'fresh' ? '#FFFFFF' : '#64748B'}
+                color={waterFilter === 'fresh' ? '#0F172A' : 'rgba(255,255,255,0.75)'}
               />
               <Text style={[styles.chipText, waterFilter === 'fresh' && styles.chipTextActive]}>Eau douce</Text>
             </Pressable>
@@ -523,7 +529,7 @@ export default function ExploreScreen() {
               <Ionicons
                 name={waterFilter === 'salt' ? 'boat' : 'boat-outline'}
                 size={16}
-                color={waterFilter === 'salt' ? '#FFFFFF' : '#64748B'}
+                color={waterFilter === 'salt' ? '#0F172A' : 'rgba(255,255,255,0.75)'}
               />
               <Text style={[styles.chipText, waterFilter === 'salt' && styles.chipTextActive]}>Eau salée</Text>
             </Pressable>
@@ -532,7 +538,7 @@ export default function ExploreScreen() {
 
         {loading ? (
           <View style={styles.center}>
-            <ActivityIndicator size="large" color="#3B82F6" />
+            <ActivityIndicator size="large" color="#0F172A" />
           </View>
         ) : (
           <FlatList
@@ -540,12 +546,16 @@ export default function ExploreScreen() {
             style={{ flex: 1 }}
             contentContainerStyle={{ padding: padding, paddingBottom: 24 }}
             data={filtered}
-            keyExtractor={(item) => item.name}
+            keyExtractor={(item) => normalizeName(item.name)}
             numColumns={3}
             columnWrapperStyle={{ gap }}
             onEndReached={() => {}}
             getItemLayout={getItemLayout}
             onScrollToIndexFailed={onScrollToIndexFailed}
+            windowSize={5}
+            maxToRenderPerBatch={9}
+            initialNumToRender={18}
+            removeClippedSubviews
             renderItem={({ item }) => {
               const key = normalizeName(item.name);
               const isDiscovered = verifiedDiscovered.has(key);
@@ -570,7 +580,7 @@ export default function ExploreScreen() {
                 <View style={styles.emptyIconCircle}>
                   <Ionicons name="fish-outline" size={48} color="#94A3B8" />
                 </View>
-                <ThemedText style={styles.emptyText}>Aucune espece trouvee</ThemedText>
+                <ThemedText style={styles.emptyText}>{t('explore_no_results')}</ThemedText>
                 <ThemedText style={styles.emptySubtext}>Essayez de modifier vos filtres</ThemedText>
               </View>
             )}
@@ -662,33 +672,32 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: '800',
-    color: '#1E3A8A',
+    color: '#FFFFFF',
     lineHeight: 34,
   },
   subtitle: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#1E40AF',
+    color: 'rgba(255,255,255,0.7)',
   },
   statsBox: {
-    backgroundColor: 'rgba(59, 130, 246, 0.12)',
+    backgroundColor: 'rgba(255,255,255,0.15)',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'rgba(59, 130, 246, 0.35)',
+    borderColor: 'rgba(255,255,255,0.3)',
   },
   statsText: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#1E3A8A',
+    color: '#FFFFFF',
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#D9E5FF',
+    borderWidth: 0,
     borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 12,
@@ -723,21 +732,21 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 14,
     borderRadius: 12,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'rgba(255,255,255,0.12)',
     borderWidth: 1,
-    borderColor: '#1E3A8A',
+    borderColor: 'rgba(255,255,255,0.3)',
   },
   chipActive: {
-    backgroundColor: '#1E3A8A',
-    borderColor: '#1E3A8A',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#FFFFFF',
   },
   chipText: {
-    color: '#64748B',
+    color: 'rgba(255,255,255,0.8)',
     fontWeight: '600',
     fontSize: 14,
   },
   chipTextActive: {
-    color: '#FFFFFF',
+    color: '#0F172A',
   },
   center: {
     flex: 1,

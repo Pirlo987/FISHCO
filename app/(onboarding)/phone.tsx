@@ -17,8 +17,10 @@ import { ThemedSafeArea } from '@/components/SafeArea';
 import { useAuth } from '@/providers/AuthProvider';
 import { COUNTRIES, findCountryByName, iso2ToFlag, Country } from '@/lib/countries';
 import { mergeProfileDraft, readProfileDraft } from '@/lib/profileDraft';
+import { useLanguage } from '@/providers/LanguageProvider';
 
 export default function PhoneStep() {
+  const { t } = useLanguage();
   const router = useRouter();
   const { session } = useAuth();
   const [phone, setPhone] = React.useState('');
@@ -134,7 +136,7 @@ export default function PhoneStep() {
               <View style={styles.progressContainer}>
                 <View style={styles.progressBar}>
                   <LinearGradient
-                    colors={['#3B82F6', '#2563EB']}
+                    colors={['#1E3A5F', '#0F2744']}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 0 }}
                     style={[styles.progressFill, { width: '50%' }]}
@@ -265,18 +267,18 @@ export default function PhoneStep() {
             <View style={styles.buttonRow}>
               <Pressable style={styles.secondaryWrapper} onPress={() => router.back()}>
                 <View style={styles.secondaryButton}>
-                  <Text style={styles.secondaryText}>Retour</Text>
+                  <Text style={styles.secondaryText}>{t('onboard_back')}</Text>
                 </View>
               </Pressable>
-              
+
               <Pressable style={styles.primaryWrapper} onPress={onNext}>
                 <LinearGradient
-                  colors={['#3B82F6', '#2563EB']}
+                  colors={['#1E3A5F', '#0F2744']}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                   style={styles.primaryButton}
                 >
-                  <Text style={styles.primaryText}>Continuer</Text>
+                  <Text style={styles.primaryText}>{t('onboard_continue')}</Text>
                   <View style={styles.arrowWrapper}>
                     <Text style={styles.arrowIcon}>→</Text>
                   </View>
@@ -528,7 +530,7 @@ const styles = StyleSheet.create({
     flex: 1,
     borderRadius: 16,
     overflow: 'hidden',
-    shadowColor: '#3B82F6',
+    shadowColor: '#1E3A5F',
     shadowOpacity: 0.25,
     shadowRadius: 20,
     shadowOffset: { width: 0, height: 10 },
