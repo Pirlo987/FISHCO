@@ -1,7 +1,9 @@
 export type Species = {
   name: string;
-  image?: string; // URL absolue ou require local (non utilisé ici)
-  // Optional flag to track whether the species entry has been validated.
+  englishName?: string;
+  frenchAliases?: string[];
+  englishAliases?: string[];
+  image?: string;
   verified?: boolean;
   status?: string | null;
   waterType?: 'fresh' | 'salt';

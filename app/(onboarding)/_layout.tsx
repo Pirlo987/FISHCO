@@ -9,6 +9,7 @@ export default function OnboardingProfileLayout() {
       <Stack.Screen name="level" />
       <Stack.Screen name="username" />
       <Stack.Screen name="photo" />
+      <Stack.Screen name="import-catches" />
     </Stack>
   );
 }

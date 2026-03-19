@@ -1,5 +1,6 @@
 import React from 'react';
 import { Session } from '@supabase/supabase-js';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '@/lib/supabase';
 
 type AuthContextType = {
@@ -33,6 +34,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signOut = React.useCallback(async () => {
+    await AsyncStorage.multiRemove([
+      'onboarding_seen',
+      'profile_onboarding_done',
+      'profile_onboarding_pending',
+      'profile_draft',
+    ]);
     await supabase.auth.signOut();
   }, []);
 

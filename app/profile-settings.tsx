@@ -123,6 +123,7 @@ export default function ProfileSettingsScreen() {
   }, [readOnly]);
 
   const onSignOut = async () => {
+    router.replace('/onboarding');
     await signOut();
   };
 
@@ -241,6 +242,13 @@ export default function ProfileSettingsScreen() {
       ) : null}
       {session && readOnly ? (
         <View style={styles.bottomLinks}>
+          <Pressable
+            style={({ pressed }) => [styles.legalBtn, pressed && { opacity: 0.7 }]}
+            onPress={() => router.push('/(onboarding)/import-catches?from=settings')}
+          >
+            <Text style={styles.legalBtnText}>Importer des prises passées</Text>
+            <Ionicons name="chevron-forward" size={14} color="#6B7280" />
+          </Pressable>
           <Link href="/about" asChild>
             <Pressable style={styles.legalBtn}>
               <Text style={styles.legalBtnText}>{t('settings_about')}</Text>

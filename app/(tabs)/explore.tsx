@@ -29,7 +29,7 @@ import { useLanguage } from '@/providers/LanguageProvider';
 type CatchRow = { species: string | null; photo_path: string | null; [key: string]: any };
 
 export default function ExploreScreen() {
-  const { t } = useLanguage();
+  const { t, locale } = useLanguage();
   const router = useRouter();
   const { session } = useAuth();
   useSafeAreaInsets();
@@ -303,6 +303,9 @@ export default function ExploreScreen() {
               const waterType = parseWaterType(waterSource);
               return {
                 name,
+                englishName: r.english_name || undefined,
+                frenchAliases: Array.isArray(r.french_aliases) ? r.french_aliases : [],
+                englishAliases: Array.isArray(r.english_aliases) ? r.english_aliases : [],
                 image,
                 status: status ?? null,
                 verified: pending ? false : verified,
@@ -392,7 +395,15 @@ export default function ExploreScreen() {
 
   const filtered = React.useMemo(() => {
     const q = normalizeName(search);
-    const base = q ? speciesList.filter((s) => normalizeName(s.name).includes(q)) : speciesList;
+    const base = q
+      ? speciesList.filter((s) => {
+          if (normalizeName(s.name).includes(q)) return true;
+          if (s.englishName && normalizeName(s.englishName).includes(q)) return true;
+          if (s.frenchAliases?.some((a) => normalizeName(a).includes(q))) return true;
+          if (s.englishAliases?.some((a) => normalizeName(a).includes(q))) return true;
+          return false;
+        })
+      : speciesList;
     return base.filter((s) => {
       const key = normalizeName(s.name);
       const isDiscovered = verifiedDiscovered.has(key);
@@ -568,6 +579,7 @@ export default function ExploreScreen() {
                   tileWidth={tileW}
                   isDiscovered={isDiscovered}
                   isPending={isPending}
+                  locale={locale}
                   onPress={() =>
                     router.push({ pathname: '/species/[slug]', params: { slug: key, name: item.name } })
                   }
@@ -596,6 +608,7 @@ type SpeciesTileProps = {
   tileWidth: number;
   isDiscovered: boolean;
   isPending?: boolean;
+  locale: string;
   onPress: () => void;
   imageUri: string | null;
 };
@@ -605,6 +618,7 @@ const SpeciesTile = React.memo(function SpeciesTile({
   tileWidth,
   isDiscovered,
   isPending = false,
+  locale,
   onPress,
   imageUri,
 }: SpeciesTileProps) {
@@ -648,7 +662,7 @@ const SpeciesTile = React.memo(function SpeciesTile({
       </View>
 
       <Text style={[styles.tileLabel, !isDiscovered && styles.tileLabelDim]} numberOfLines={1}>
-        {item.name}
+        {locale === 'en' && item.englishName ? item.englishName : item.name}
       </Text>
     </Pressable>
   );

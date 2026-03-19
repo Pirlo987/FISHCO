@@ -31,6 +31,7 @@ type SpeciesRecord = Record<string, any> & {
   conservation_status?: string;
   diet?: string;
   region_stock?: string;
+  regions?: string[] | null;
   average_size_cm?: number | string | null;
   maturity_size_cm?: number | string | null;
   optimal_season?: string;
@@ -78,6 +79,25 @@ type SpeciesRecord = Record<string, any> & {
   image_bucket?: string;
   photo_bucket?: string;
   bucket?: string;
+};
+
+const REGION_LABELS: Record<string, string> = {
+  atl_n: 'Atlantique Nord',
+  atl_s: 'Atlantique Sud',
+  med: 'Méditerranée',
+  north_sea: 'Mer du Nord',
+  baltic: 'Mer Baltique',
+  black: 'Mer Noire',
+  pac_n: 'Pacifique Nord',
+  pac_s: 'Pacifique Sud',
+  indian: 'Océan Indien',
+  arctic: 'Arctique',
+  southern: 'Océan Austral',
+  freshwater_eu: 'Eaux douces EU',
+  freshwater_na: 'Eaux douces Amérique',
+  freshwater_sa: 'Amazonie',
+  freshwater_af: 'Afrique',
+  freshwater_as: 'Asie',
 };
 
 const SPECIES_BUCKET = process.env.EXPO_PUBLIC_SPECIES_BUCKET as string | undefined;
@@ -348,11 +368,16 @@ export default function SpeciesDetailScreen() {
   const enName = getField('english_name', 'English common name');
   const region = getField('region_stock', 'Region / Stock', ' Region / Stock', 'Région / Stock');
   const regionTags = React.useMemo(() => {
+    // Prefer the structured regions[] column (standardized codes, no parsing needed)
+if (Array.isArray(record?.regions) && record.regions.length > 0) {
+      return record.regions as string[];
+    }
+    // Fall back to parsing the freetext region_stock field
     const fromRegion = parseRegionToTags(region ? String(region) : '');
     if (fromRegion.length) return fromRegion;
-    // Fallback: try to infer from display name (e.g., "Saumon atlantique")
+    // Last resort: try to infer from display name (e.g., "Saumon atlantique")
     return parseRegionToTags(displayName || '');
-  }, [region, displayName]);
+  }, [record, region, displayName]);
   const season = getField('optimal_season', 'Saison optimale');
   const methods = getField('fishing_methods', 'methodes de peche', 'Méthodes de pêche');
   const baits = getField('baits', 'Appats', 'Appâts');
@@ -446,7 +471,7 @@ export default function SpeciesDetailScreen() {
                       <View style={styles.tagRow}>
                         {regionTags.map((tag) => (
                           <View style={styles.tag} key={tag}>
-                            <Text style={styles.tagText}>{tag}</Text>
+                            <Text style={styles.tagText}>{REGION_LABELS[tag] ?? tag}</Text>
                           </View>
                         ))}
                       </View>

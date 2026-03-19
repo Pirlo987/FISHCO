@@ -17,7 +17,10 @@ export function useSpeciesLoader() {
       if (!error && Array.isArray(data)) {
         const mapped: Species[] = (data as any[])
           .map((r) => ({
-            name: r.name || r.french_name || r.english_name || r.nom || '',
+            name: r.name || r.french_name || r.nom || '',
+            englishName: r.english_name || undefined,
+            frenchAliases: Array.isArray(r.french_aliases) ? r.french_aliases : [],
+            englishAliases: Array.isArray(r.english_aliases) ? r.english_aliases : [],
             image: r.image_url || r.image_path || undefined,
           }))
           .filter((s) => s.name);
@@ -53,21 +56,29 @@ export function useSpeciesLoader() {
     }, [refresh]),
   );
 
+  const matchesQuery = useCallback((s: Species, q: string): boolean => {
+    if (normalizeName(s.name).includes(q)) return true;
+    if (s.englishName && normalizeName(s.englishName).includes(q)) return true;
+    if (s.frenchAliases?.some((a) => normalizeName(a).includes(q))) return true;
+    if (s.englishAliases?.some((a) => normalizeName(a).includes(q))) return true;
+    return false;
+  }, []);
+
   const isKnownSpecies = useCallback(
     (name: string) => {
       const normalized = normalizeName(name);
-      return speciesOptions.some((o) => normalizeName(o.name) === normalized);
+      return speciesOptions.some((o) => matchesQuery(o, normalized));
     },
-    [speciesOptions],
+    [speciesOptions, matchesQuery],
   );
 
   const filterSpecies = useCallback(
     (query: string) => {
       const q = normalizeName(query);
       if (!q) return speciesOptions.slice(0, 8);
-      return speciesOptions.filter((s) => normalizeName(s.name).includes(q)).slice(0, 8);
+      return speciesOptions.filter((s) => matchesQuery(s, q)).slice(0, 8);
     },
-    [speciesOptions],
+    [speciesOptions, matchesQuery],
   );
 
   return { speciesOptions, isKnownSpecies, filterSpecies } as const;

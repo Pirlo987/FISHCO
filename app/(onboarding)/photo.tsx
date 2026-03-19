@@ -136,7 +136,7 @@ export default function PhotoStep() {
     await AsyncStorage.removeItem('profile_onboarding_pending');
     await AsyncStorage.setItem('profile_onboarding_done', '1');
     await AsyncStorage.setItem('onboarding_seen', '1');
-    router.replace('/(tabs)');
+    router.replace('/(onboarding)/import-catches');
   };
 
   const onSave = async () => {

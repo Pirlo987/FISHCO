@@ -8,10 +8,15 @@ import TabBarBackground from '@/components/ui/TabBarBackground';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useLanguage } from '@/providers/LanguageProvider';
+import { useAuth } from '@/providers/AuthProvider';
 
 export default function TabLayout() {
+  const { session } = useAuth();
   const colorScheme = useColorScheme();
   const { t } = useLanguage();
+
+  // Bloque le rendu pendant que l'AuthGate redirige vers /onboarding après déconnexion
+  if (!session) return null;
 
   return (
     <Tabs
