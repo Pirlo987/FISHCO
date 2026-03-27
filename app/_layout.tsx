@@ -7,11 +7,13 @@ import { Stack, usePathname, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import React from 'react';
+import { ActivityIndicator, Image, StyleSheet, View } from 'react-native';
 
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { AuthProvider, useAuth } from '@/providers/AuthProvider';
 import { LanguageProvider } from '@/providers/LanguageProvider';
 import { supabase } from '@/lib/supabase';
+import { initializePurchases, identifyUser } from '@/lib/purchases';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Keep the splash screen visible until we finish loading critical app state.
@@ -129,6 +131,13 @@ function AuthGate({
     profileCheckRun.current = false;
   }, [session?.user?.id]);
 
+  // Lier l'utilisateur RevenueCat à la session Supabase
+  React.useEffect(() => {
+    if (session?.user?.id) {
+      identifyUser(session.user.id);
+    }
+  }, [session?.user?.id]);
+
   React.useEffect(() => {
     if (!initialized || !onboardingChecked || hasSeenOnboarding === null || profilePending === null || profileDone === null) return;
 
@@ -176,33 +185,47 @@ export default function RootLayout() {
   });
   const [appReady, setAppReady] = React.useState(false);
 
+  // Initialiser RevenueCat au démarrage
+  React.useEffect(() => {
+    initializePurchases();
+  }, []);
+
   const handleAuthReady = React.useCallback(() => {
     setAppReady(true);
   }, []);
 
+  // Hide native splash as soon as fonts are loaded — our JS loading screen takes over.
   React.useEffect(() => {
-    if (loaded && appReady) {
-      SplashScreen.hideAsync().catch(() => {
-        /* noop */
-      });
+    if (loaded) {
+      SplashScreen.hideAsync().catch(() => { /* noop */ });
     }
-  }, [loaded, appReady]);
+  }, [loaded]);
+
+  if (!loaded) return null;
 
   return (
     <LanguageProvider>
     <AuthProvider>
       <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
         <AuthGate onReady={handleAuthReady}>
-          <Stack>
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-            <Stack.Screen name="(onboarding)" options={{ headerShown: false }} />
-            <Stack.Screen name="onboarding" options={{ headerShown: false }} />
-            <Stack.Screen name="history" options={{ headerShown: false }} />
-            <Stack.Screen name="catches" options={{ headerShown: false }} />
-            <Stack.Screen name="profile-settings" options={{ headerShown: false, presentation: 'modal' }} />
-            <Stack.Screen name="+not-found" />
-          </Stack>
+          {!appReady ? (
+            <View style={loadingStyles.container}>
+              <Image source={require('../assets/images/icon_app.png')} style={loadingStyles.logo} resizeMode="contain" />
+              <ActivityIndicator color="#2563EB" style={loadingStyles.spinner} />
+            </View>
+          ) : (
+            <Stack>
+              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+              <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+              <Stack.Screen name="(onboarding)" options={{ headerShown: false }} />
+              <Stack.Screen name="onboarding" options={{ headerShown: false }} />
+              <Stack.Screen name="history" options={{ headerShown: false }} />
+              <Stack.Screen name="catches" options={{ headerShown: false }} />
+              <Stack.Screen name="profile-settings" options={{ headerShown: false, presentation: 'modal' }} />
+              <Stack.Screen name="premium" options={{ headerShown: false }} />
+              <Stack.Screen name="+not-found" />
+            </Stack>
+          )}
         </AuthGate>
         <StatusBar style="dark" />
       </ThemeProvider>
@@ -210,3 +233,20 @@ export default function RootLayout() {
     </LanguageProvider>
   );
 }
+
+const loadingStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 32,
+  },
+  logo: {
+    width: 120,
+    height: 120,
+  },
+  spinner: {
+    marginTop: 8,
+  },
+});

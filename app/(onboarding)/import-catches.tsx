@@ -11,8 +11,14 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
+import * as FileSystem from 'expo-file-system/legacy';
+import { decode } from 'base64-arraybuffer';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { ThemedSafeArea } from '@/components/SafeArea';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/lib/supabase';
@@ -137,6 +143,7 @@ type CatchEntry = {
   appat: string;
   ville: string;
   isKnown: boolean;
+  photo: ImagePicker.ImagePickerAsset | null;
 };
 
 export default function ImportCatchesStep() {
@@ -163,6 +170,7 @@ export default function ImportCatchesStep() {
   const [formPoids, setFormPoids] = useState('');
   const [formAppat, setFormAppat] = useState('');
   const [formVille, setFormVille] = useState('');
+  const [formPhoto, setFormPhoto] = useState<ImagePicker.ImagePickerAsset | null>(null);
 
   const filteredSpecies = useMemo(() => {
     const q = normalizeName(query);
@@ -176,7 +184,19 @@ export default function ImportCatchesStep() {
     setFormPoids('');
     setFormAppat('');
     setFormVille('');
+    setFormPhoto(null);
     setModalVisible(true);
+  }, []);
+
+  const pickPhoto = useCallback(async () => {
+    const { granted } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!granted) return;
+    const res = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      quality: 0.85,
+    } as any);
+    if (!res.canceled) setFormPhoto(res.assets[0]);
   }, []);
 
   const addCatch = useCallback(() => {
@@ -193,6 +213,7 @@ export default function ImportCatchesStep() {
       appat: formAppat,
       ville: formVille,
       isKnown: !!dbMatch,
+      photo: formPhoto,
     };
     setCatches((prev) => [...prev, entry]);
     setModalVisible(false);
@@ -200,6 +221,24 @@ export default function ImportCatchesStep() {
 
   const removeCatch = useCallback((id: string) => {
     setCatches((prev) => prev.filter((c) => c.id !== id));
+  }, []);
+
+  const uploadCatchPhoto = useCallback(async (asset: ImagePicker.ImagePickerAsset, userId: string): Promise<string | null> => {
+    const manipulated = await ImageManipulator.manipulateAsync(asset.uri, [], {
+      compress: 0.85,
+      format: ImageManipulator.SaveFormat.JPEG,
+    });
+    const stamp = new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 14);
+    const rand = Math.random().toString(36).slice(2, 8);
+    const filePath = `${userId}/${stamp}-${rand}.jpg`;
+    const base64 = await FileSystem.readAsStringAsync(manipulated.uri, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+    const { error } = await supabase.storage
+      .from('catch-photos')
+      .upload(filePath, decode(base64), { contentType: 'image/jpeg', cacheControl: '3600', upsert: false });
+    if (error) throw error;
+    return filePath;
   }, []);
 
   const handleFinish = useCallback(async () => {
@@ -210,6 +249,11 @@ export default function ImportCatchesStep() {
     setLoading(true);
     for (const entry of catches) {
       try {
+        let photoPath: string | null = null;
+        if (entry.photo) {
+          photoPath = await uploadCatchPhoto(entry.photo, session.user.id);
+        }
+
         const { data: newCatch, error } = await supabase
           .from('catches')
           .insert({
@@ -220,7 +264,7 @@ export default function ImportCatchesStep() {
             region: entry.ville || null,
             notes: entry.appat || null,
             title: null,
-            photo_path: null,
+            photo_path: photoPath,
             is_public: false,
             description: null,
             caught_at: new Date().toISOString(),
@@ -255,7 +299,7 @@ export default function ImportCatchesStep() {
     }
     setLoading(false);
     exit();
-  }, [session, catches, exit, router]);
+  }, [session, catches, exit, uploadCatchPhoto]);
 
   // ─── PHASE CHOIX ────────────────────────────────────────────────────────────
   if (phase === 'choice') {
@@ -393,6 +437,7 @@ export default function ImportCatchesStep() {
             >
               {catches.map((c) => (
                 <View key={c.id} style={styles.chip}>
+                  {c.photo && <Ionicons name="image" size={12} color="#93C5FD" />}
                   <Text style={styles.chipText} numberOfLines={1}>{c.species}</Text>
                   <Pressable onPress={() => removeCatch(c.id)} hitSlop={6} style={styles.chipRemove}>
                     <Text style={styles.chipRemoveText}>✕</Text>
@@ -524,6 +569,27 @@ export default function ImportCatchesStep() {
                     value={formAppat}
                     onChangeText={setFormAppat}
                   />
+                </View>
+
+                {/* Photo */}
+                <View style={styles.fieldGroup}>
+                  <Text style={styles.label}>
+                    Photo{' '}
+                    <Text style={styles.optional}>(optionnel)</Text>
+                  </Text>
+                  {formPhoto ? (
+                    <View style={styles.photoPreviewWrap}>
+                      <Image source={{ uri: formPhoto.uri }} style={styles.photoPreview} contentFit="cover" />
+                      <Pressable style={styles.photoRemove} onPress={() => setFormPhoto(null)} hitSlop={8}>
+                        <Ionicons name="close-circle" size={22} color="#fff" />
+                      </Pressable>
+                    </View>
+                  ) : (
+                    <Pressable style={styles.photoPickerBtn} onPress={pickPhoto}>
+                      <Ionicons name="image-outline" size={20} color="#64748B" />
+                      <Text style={styles.photoPickerText}>Choisir depuis la galerie</Text>
+                    </Pressable>
+                  )}
                 </View>
 
                 <View style={styles.modalBtns}>
@@ -755,6 +821,23 @@ const styles = StyleSheet.create({
     color: '#0f172a',
     backgroundColor: '#F8FAFC',
   },
+  photoPickerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    borderStyle: 'dashed',
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: '#F8FAFC',
+  },
+  photoPickerText: { fontSize: 14, color: '#64748B', fontWeight: '500' },
+  photoPreviewWrap: { position: 'relative', alignSelf: 'flex-start' },
+  photoPreview: { width: 100, height: 100, borderRadius: 12 },
+  photoRemove: { position: 'absolute', top: -8, right: -8 },
+
   modalBtns: { flexDirection: 'row', gap: 12, marginTop: 6 },
   cancelBtn: {
     flex: 1,

@@ -4,6 +4,10 @@ import { useAuth } from '@/providers/AuthProvider';
 import { awardLikeGiven, awardLikeReceived } from '@/lib/gamification';
 import type { FeedItem, CommentRow } from '@/components/community/types';
 
+const URL_REGEX = /https?:\/\/|www\./i;
+export const MAX_COMMENT_LENGTH = 500;
+
+
 export function useCommunityFeed() {
   const { session } = useAuth();
 
@@ -18,6 +22,15 @@ export function useCommunityFeed() {
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
   const [commentOpen, setCommentOpen] = useState<Record<string, boolean>>({});
   const [commentsList, setCommentsList] = useState<Record<string, CommentRow[]>>({});
+  const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
+  const [reportedIds, setReportedIds] = useState<Set<string>>(new Set());
+  const [blockedUserIds, setBlockedUserIds] = useState<Set<string>>(new Set());
+  const [reportedCommentIds, setReportedCommentIds] = useState<Set<string>>(new Set());
+
+  const visibleFeed = useMemo(
+    () => feed.filter((item) => !hiddenIds.has(item.id) && !blockedUserIds.has(item.user_id)),
+    [feed, hiddenIds, blockedUserIds],
+  );
 
   const ownerByCatch = useMemo(() => {
     const map: Record<string, string> = {};
@@ -76,6 +89,7 @@ export function useCommunityFeed() {
           'id,user_id,title,species,weight_kg,length_cm,region,description,photo_path,caught_at,catch_likes(count),catch_comments(count),profiles:profiles (id,username,first_name,last_name,avatar_url,avatar_path,photo_url,photo_path)',
         )
         .eq('is_public', true)
+        .eq('status', 'active')
         .order('caught_at', { ascending: false })
         .limit(50);
 
@@ -150,6 +164,8 @@ export function useCommunityFeed() {
       if (!session?.user?.id) return;
       const draft = (commentDrafts[catchId] || '').trim();
       if (!draft) return;
+      if (draft.length > MAX_COMMENT_LENGTH) return;
+      if (URL_REGEX.test(draft)) return;
       setCommentDrafts((prev) => ({ ...prev, [catchId]: '' }));
       const { data, error: insertError } = await supabase
         .from('catch_comments')
@@ -185,8 +201,50 @@ export function useCommunityFeed() {
     setCommentDrafts((prev) => ({ ...prev, [id]: text }));
   }, []);
 
+  const hidePost = useCallback((id: string) => {
+    setHiddenIds((prev) => new Set([...prev, id]));
+  }, []);
+
+  const blockUser = useCallback(
+    async (userId: string) => {
+      if (!session?.user?.id || userId === session.user.id) return;
+      setBlockedUserIds((prev) => new Set([...prev, userId]));
+      await supabase
+        .from('blocked_users')
+        .upsert({ user_id: session.user.id, blocked_id: userId });
+    },
+    [session?.user?.id],
+  );
+
+  const reportComment = useCallback(
+    async (commentId: string) => {
+      if (!session?.user?.id) return;
+      setReportedCommentIds((prev) => new Set([...prev, commentId]));
+      await supabase.from('reports').insert({
+        comment_id: commentId,
+        reported_by: session.user.id,
+        reason: 'inappropriate',
+      });
+    },
+    [session?.user?.id],
+  );
+
+  const reportPost = useCallback(
+    async (catchId: string, reason: string) => {
+      if (!session?.user?.id) return;
+      setReportedIds((prev) => new Set([...prev, catchId]));
+      setHiddenIds((prev) => new Set([...prev, catchId]));
+      await supabase.from('reports').insert({
+        catch_id: catchId,
+        reported_by: session.user.id,
+        reason,
+      });
+    },
+    [session?.user?.id],
+  );
+
   return {
-    feed,
+    feed: visibleFeed,
     loading,
     refreshing,
     error,
@@ -203,5 +261,11 @@ export function useCommunityFeed() {
     onPhotoRatio,
     onToggleComments,
     onDraftChange,
+    hidePost,
+    reportPost,
+    reportedIds,
+    blockUser,
+    reportComment,
+    reportedCommentIds,
   } as const;
 }

@@ -18,11 +18,14 @@ type Props = {
   comments: CommentRow[];
   commentDraft: string;
   commentOpen: boolean;
+  reportedCommentIds: Set<string>;
   onToggleLike: (id: string) => void;
   onToggleComments: (id: string) => void;
   onSubmitComment: (id: string) => void;
   onDraftChange: (id: string, text: string) => void;
   onPhotoRatio: (id: string, ratio: number) => void;
+  onOpenMenu: (id: string) => void;
+  onReportComment: (commentId: string) => void;
 };
 
 export const CatchCard = React.memo(function CatchCard({
@@ -34,11 +37,14 @@ export const CatchCard = React.memo(function CatchCard({
   comments,
   commentDraft,
   commentOpen,
+  reportedCommentIds,
   onToggleLike,
   onToggleComments,
   onSubmitComment,
   onDraftChange,
   onPhotoRatio,
+  onOpenMenu,
+  onReportComment,
 }: Props) {
   const name = displayName(item.profiles);
   const photo = catchPhotoUrl(item.photo_path);
@@ -64,7 +70,7 @@ export const CatchCard = React.memo(function CatchCard({
           </View>
           <Text style={styles.meta}>{timeAgo}</Text>
         </View>
-        <Pressable style={styles.moreBtn} hitSlop={10}>
+        <Pressable style={styles.moreBtn} hitSlop={10} onPress={() => onOpenMenu(item.id)}>
           <Ionicons name="ellipsis-horizontal" size={18} color={C.muted} />
         </Pressable>
       </View>
@@ -119,8 +125,10 @@ export const CatchCard = React.memo(function CatchCard({
           isOpen={commentOpen}
           comments={comments}
           draft={commentDraft}
+          reportedCommentIds={reportedCommentIds}
           onDraftChange={(text) => onDraftChange(item.id, text)}
           onSubmit={() => onSubmitComment(item.id)}
+          onReportComment={onReportComment}
         />
       </View>
     </View>

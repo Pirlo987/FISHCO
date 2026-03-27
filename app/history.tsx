@@ -15,6 +15,8 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/AuthProvider';
 import { ThemedSafeArea } from '@/components/SafeArea';
 import { useLanguage } from '@/providers/LanguageProvider';
+import { Ionicons } from '@expo/vector-icons';
+import { usePremium, FREE_HISTORY_LIMIT } from '@/hooks/usePremium';
 
 type Catch = {
   id: string;
@@ -72,21 +74,26 @@ export default function HistoryScreen() {
   const { t } = useLanguage();
   const router = useRouter();
   const { session } = useAuth();
+  const { isPremium, isLoading: isPremiumLoading } = usePremium();
   const [data, setData] = React.useState<Catch[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [refreshing, setRefreshing] = React.useState(false);
 
   const fetchData = React.useCallback(async () => {
     if (!session) return;
-    const { data: rows, error } = await supabase
+    const query = supabase
       .from('catches')
       .select('id,species,weight_kg,length_cm,notes,caught_at,photo_path,region')
       .eq('user_id', session.user.id)
       .order('caught_at', { ascending: false });
 
+    const { data: rows, error } = (isPremium || isPremiumLoading)
+      ? await query
+      : await query.limit(FREE_HISTORY_LIMIT);
+
     if (!error && rows) setData(rows as unknown as Catch[]);
     setLoading(false);
-  }, [session]);
+  }, [session, isPremium, isPremiumLoading]);
 
   React.useEffect(() => {
     fetchData();
@@ -136,6 +143,22 @@ export default function HistoryScreen() {
         removeClippedSubviews
         maxToRenderPerBatch={10}
         windowSize={11}
+        ListFooterComponent={
+          !isPremium && !isPremiumLoading && data.length >= FREE_HISTORY_LIMIT ? (
+            <Pressable onPress={() => router.push('/premium')} style={styles.limitBanner}>
+              <Ionicons name="lock-closed" size={18} color="#B45309" />
+              <View style={styles.limitBannerText}>
+                <Text style={styles.limitBannerTitle}>
+                  Historique limite a {FREE_HISTORY_LIMIT} prises
+                </Text>
+                <Text style={styles.limitBannerSub}>
+                  Passe Premium pour voir tout ton historique
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color="#B45309" />
+            </Pressable>
+          ) : null
+        }
         ListEmptyComponent={
           <View style={styles.center}>
             <Text>{t('history_no_catches')}</Text>
@@ -167,4 +190,19 @@ const styles = StyleSheet.create({
   notes: { marginTop: 4, color: '#374151' },
   thumb: { width: 64, height: 64, borderRadius: 8, backgroundColor: '#eee' },
   thumbEmpty: { backgroundColor: '#F3F4F6' },
+  limitBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    margin: 16,
+    backgroundColor: '#FFFBEB',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+  },
+  limitBannerText: { flex: 1, gap: 3 },
+  limitBannerTitle: { fontSize: 13, fontWeight: '700', color: '#92400E' },
+  limitBannerSub: { fontSize: 12, color: '#B45309' },
 });

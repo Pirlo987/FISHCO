@@ -21,6 +21,7 @@ import { useLanguage } from '@/providers/LanguageProvider';
 import { useImagePicker } from '@/hooks/useImagePicker';
 import { useSpeciesLoader } from '@/hooks/useSpeciesLoader';
 import { useAiClassification, prepareImageForUpload } from '@/hooks/useAiClassification';
+import { usePremium } from '@/hooks/usePremium';
 import type { AISuggestion } from '@/hooks/useAiClassification';
 
 import { ProgressBar } from '@/components/add-catch/ProgressBar';
@@ -62,6 +63,7 @@ export default function AddCatchScreen() {
   const { t } = useLanguage();
   const router = useRouter();
   const { session } = useAuth();
+  const { isPremium } = usePremium();
   const insets = useSafeAreaInsets();
 
   // ── Form state ──
@@ -185,6 +187,7 @@ export default function AddCatchScreen() {
     if (visibility === 'public' && !knownSpecies) {
       Alert.alert(t('add_unknown_species'), t('add_unknown_species_msg'));
     }
+
     setLoading(true);
     try {
       const prepared = await prepareImageForUpload(image);

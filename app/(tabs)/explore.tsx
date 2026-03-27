@@ -25,6 +25,7 @@ import { ThemedView } from '@/components/ThemedView';
 import { ThemedSafeArea } from '@/components/SafeArea';
 import { ThemedText } from '@/components/ThemedText';
 import { useLanguage } from '@/providers/LanguageProvider';
+import { usePremium, FREE_FISHDEX_LIMIT } from '@/hooks/usePremium';
 
 type CatchRow = { species: string | null; photo_path: string | null; [key: string]: any };
 
@@ -32,6 +33,7 @@ export default function ExploreScreen() {
   const { t, locale } = useLanguage();
   const router = useRouter();
   const { session } = useAuth();
+  const { isPremium, isLoading: isPremiumLoading } = usePremium();
   useSafeAreaInsets();
 
   useFocusEffect(
@@ -277,8 +279,8 @@ export default function ExploreScreen() {
                 r.title ??
                 '';
               const image = toPublicUrl(
-                r.image_url ?? r.url ?? r.image ?? r.photo_url ?? r.image_path ?? r.url_path ?? r.path ?? null,
-                r.image_bucket ?? r.url_bucket ?? r.photo_bucket ?? r.bucket ?? null,
+                r.image_url || r.url || r.image || r.photo_url || r.image_path || r.url_path || r.path || null,
+                r.image_bucket || r.url_bucket || r.photo_bucket || r.bucket || null,
               );
               const status =
                 r.status ??
@@ -450,7 +452,11 @@ export default function ExploreScreen() {
     [rowHeight],
   );
 
-  const discoveredCount = verifiedDiscovered.size;
+  const rawDiscoveredCount = verifiedDiscovered.size;
+  const discoveredCount = (isPremium || isPremiumLoading)
+    ? rawDiscoveredCount
+    : Math.min(rawDiscoveredCount, FREE_FISHDEX_LIMIT);
+  const fishdexLimitReached = !isPremium && !isPremiumLoading && rawDiscoveredCount >= FREE_FISHDEX_LIMIT;
   const totalCount = speciesList.length;
 
   return (
@@ -587,6 +593,27 @@ export default function ExploreScreen() {
                 />
               );
             }}
+            ListFooterComponent={() =>
+              fishdexLimitReached ? (
+                <Pressable
+                  onPress={() => router.push('/premium')}
+                  style={styles.limitBanner}
+                >
+                  <View style={styles.limitBannerIcon}>
+                    <Ionicons name="lock-closed" size={20} color="#B45309" />
+                  </View>
+                  <View style={styles.limitBannerText}>
+                    <ThemedText style={styles.limitBannerTitle}>
+                      Limite de {FREE_FISHDEX_LIMIT} especes atteinte
+                    </ThemedText>
+                    <ThemedText style={styles.limitBannerSub}>
+                      Passe Premium pour completer ton Fishdex sans limite
+                    </ThemedText>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color="#B45309" />
+                </Pressable>
+              ) : null
+            }
             ListEmptyComponent={() => (
               <View style={[styles.center, { paddingTop: 60 }]}>
                 <View style={styles.emptyIconCircle}>
@@ -854,5 +881,40 @@ const styles = StyleSheet.create({
   tileLabelDim: {
     color: '#94A3B8',
     fontWeight: '500',
+  },
+  limitBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 16,
+    marginHorizontal: 4,
+    backgroundColor: '#FFFBEB',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+  },
+  limitBannerIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    backgroundColor: '#FEF3C7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  limitBannerText: {
+    flex: 1,
+    gap: 3,
+  },
+  limitBannerTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#92400E',
+  },
+  limitBannerSub: {
+    fontSize: 12,
+    fontWeight: '400',
+    color: '#B45309',
   },
 });

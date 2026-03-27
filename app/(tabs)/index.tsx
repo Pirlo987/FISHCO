@@ -16,6 +16,8 @@ import { useFocusEffect } from '@react-navigation/native';
 import * as Location from 'expo-location';
 
 import { ThemedText } from '@/components/ThemedText';
+import { PremiumBanner } from '@/components/PremiumBanner';
+import { usePremium } from '@/hooks/usePremium';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/lib/supabase';
 import { events } from '@/lib/events';
@@ -126,6 +128,7 @@ export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { session } = useAuth();
+  const { isPremium } = usePremium();
 
   const [recentCatches, setRecentCatches] = React.useState<CatchSummary[]>([]);
   const [loadingCatches, setLoadingCatches] = React.useState(false);
@@ -444,6 +447,9 @@ export default function HomeScreen() {
             <ThemedText style={styles.progressHint}>{t('home_max_level')}</ThemedText>
           )}
         </View>
+
+        {/* ── Premium Banner ── */}
+        {!isPremium && <PremiumBanner onPress={() => router.push('/premium')} />}
 
         {/* ── Recent Catches ── */}
         <View style={styles.section}>

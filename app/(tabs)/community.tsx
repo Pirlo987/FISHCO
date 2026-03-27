@@ -14,6 +14,7 @@ import { ThemedSafeArea } from '@/components/SafeArea';
 import { C } from '@/constants/communityPalette';
 import { useCommunityFeed } from '@/hooks/useCommunityFeed';
 import { CatchCard } from '@/components/community/CatchCard';
+import { PostMenu } from '@/components/community/PostMenu';
 import type { FeedItem } from '@/components/community/types';
 import { useLanguage } from '@/providers/LanguageProvider';
 
@@ -37,7 +38,38 @@ export default function CommunityScreen() {
     onPhotoRatio,
     onToggleComments,
     onDraftChange,
+    hidePost,
+    reportPost,
+    reportedIds,
+    blockUser,
+    reportComment,
+    reportedCommentIds,
   } = useCommunityFeed();
+
+  const [menuCatch, setMenuCatch] = React.useState<{ id: string; userId: string } | null>(null);
+
+  const handleOpenMenu = React.useCallback((id: string, userId: string) => {
+    setMenuCatch({ id, userId });
+  }, []);
+
+  const handleCloseMenu = React.useCallback(() => {
+    setMenuCatch(null);
+  }, []);
+
+  const handleHide = React.useCallback(() => {
+    if (menuCatch) hidePost(menuCatch.id);
+  }, [menuCatch, hidePost]);
+
+  const handleReport = React.useCallback(
+    (reason: string) => {
+      if (menuCatch) reportPost(menuCatch.id, reason);
+    },
+    [menuCatch, reportPost],
+  );
+
+  const handleBlockUser = React.useCallback(() => {
+    if (menuCatch) blockUser(menuCatch.userId);
+  }, [menuCatch, blockUser]);
 
   const renderItem = React.useCallback(
     ({ item }: { item: FeedItem }) => (
@@ -50,11 +82,14 @@ export default function CommunityScreen() {
         comments={commentsList[item.id] ?? []}
         commentDraft={commentDrafts[item.id] ?? ''}
         commentOpen={commentOpen[item.id] ?? false}
+        reportedCommentIds={reportedCommentIds}
         onToggleLike={toggleLike}
         onToggleComments={onToggleComments}
         onSubmitComment={submitComment}
         onDraftChange={onDraftChange}
         onPhotoRatio={onPhotoRatio}
+        onOpenMenu={(id) => handleOpenMenu(id, item.user_id)}
+        onReportComment={reportComment}
       />
     ),
     [
@@ -65,11 +100,14 @@ export default function CommunityScreen() {
       commentsList,
       commentDrafts,
       commentOpen,
+      reportedCommentIds,
       toggleLike,
       onToggleComments,
       submitComment,
       onDraftChange,
       onPhotoRatio,
+      handleOpenMenu,
+      reportComment,
     ],
   );
 
@@ -142,6 +180,15 @@ export default function CommunityScreen() {
           }
         />
       )}
+
+      <PostMenu
+        visible={menuCatch !== null}
+        reported={menuCatch !== null && reportedIds.has(menuCatch.id)}
+        onHide={handleHide}
+        onReport={handleReport}
+        onBlockUser={handleBlockUser}
+        onClose={handleCloseMenu}
+      />
     </ThemedSafeArea>
   );
 }

@@ -8,6 +8,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import { ThemedSafeArea } from '@/components/SafeArea';
 import { supabase } from '@/lib/supabase';
 import { useLanguage } from '@/providers/LanguageProvider';
+import { usePremium } from '@/hooks/usePremium';
 
 type ProfileRow = {
   first_name: string | null;
@@ -87,6 +88,7 @@ export default function ProfileScreen() {
   const [longestCatch, setLongestCatch] = React.useState<CatchSummary | null>(null);
   const [recentCatches, setRecentCatches] = React.useState<CatchSummary[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const { isPremium } = usePremium();
   const [error, setError] = React.useState<string | null>(null);
   const hasLoadedOnce = React.useRef(false);
 
@@ -239,6 +241,12 @@ export default function ProfileScreen() {
               )}
               <View style={{ flex: 1 }}>
                 <Text style={styles.name}>{usernameLabel}</Text>
+                {isPremium && (
+                  <View style={styles.premiumBadge}>
+                    <Ionicons name="star" size={11} color="#92400e" />
+                    <Text style={styles.premiumBadgeText}>Premium</Text>
+                  </View>
+                )}
                 {realName ? <Text style={styles.subName}>{realName}</Text> : null}
               </View>
               <Pressable onPress={openInfo} style={styles.settingsButton} hitSlop={12}>
@@ -312,6 +320,8 @@ const styles = StyleSheet.create({
   avatarInitials: { fontSize: 24, fontWeight: '700', color: '#4B5563' },
   name: { fontSize: 24, fontWeight: '700' },
   subName: { color: '#4B5563', fontSize: 18, marginTop: 4, fontWeight: '600' },
+  premiumBadge: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', backgroundColor: '#fef3c7', borderWidth: 1, borderColor: '#f59e0b', borderRadius: 20, paddingHorizontal: 8, paddingVertical: 3, marginTop: 4, gap: 4 },
+  premiumBadgeText: { color: '#92400e', fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
   settingsButton: {
     width: 40,
     height: 40,

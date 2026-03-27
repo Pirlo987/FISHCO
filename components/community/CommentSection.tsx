@@ -6,24 +6,36 @@ import { displayName, formatTimeAgo } from '@/lib/communityHelpers';
 import { UserAvatar } from './UserAvatar';
 import type { CommentRow } from './types';
 import { useLanguage } from '@/providers/LanguageProvider';
+import { MAX_COMMENT_LENGTH } from '@/hooks/useCommunityFeed';
+
+const URL_REGEX = /https?:\/\/|www\./i;
 
 type Props = {
   isOpen: boolean;
   comments: CommentRow[];
   draft: string;
+  reportedCommentIds: Set<string>;
   onDraftChange: (text: string) => void;
   onSubmit: () => void;
+  onReportComment: (commentId: string) => void;
 };
 
 export const CommentSection = React.memo(function CommentSection({
   isOpen,
   comments,
   draft,
+  reportedCommentIds,
   onDraftChange,
   onSubmit,
+  onReportComment,
 }: Props) {
   const { t } = useLanguage();
   if (!isOpen) return null;
+
+  const hasUrl = URL_REGEX.test(draft);
+  const overLimit = draft.length > MAX_COMMENT_LENGTH;
+  const canSubmit = draft.trim().length > 0 && !hasUrl && !overLimit;
+  const showCounter = draft.length > MAX_COMMENT_LENGTH - 100;
 
   return (
     <View style={styles.box}>
@@ -32,6 +44,7 @@ export const CommentSection = React.memo(function CommentSection({
           {comments.map((c) => {
             const cName = displayName(c.profiles);
             const timeAgo = formatTimeAgo(c.created_at);
+            const alreadyReported = reportedCommentIds.has(c.id);
             return (
               <View key={c.id} style={styles.row}>
                 <UserAvatar profile={c.profiles} name={cName} size={28} />
@@ -42,12 +55,28 @@ export const CommentSection = React.memo(function CommentSection({
                   </Text>
                   <Text style={styles.time}>{timeAgo}</Text>
                 </View>
+                <Pressable
+                  hitSlop={10}
+                  onPress={() => !alreadyReported && onReportComment(c.id)}
+                  style={styles.flagBtn}
+                >
+                  <Ionicons
+                    name={alreadyReported ? 'flag' : 'flag-outline'}
+                    size={13}
+                    color={alreadyReported ? C.like : C.muted}
+                  />
+                </Pressable>
               </View>
             );
           })}
         </View>
       )}
-      <View style={styles.inputWrap}>
+      {(hasUrl || overLimit) && (
+        <Text style={styles.inputError}>
+          {hasUrl ? 'Les liens ne sont pas autorises' : `Maximum ${MAX_COMMENT_LENGTH} caracteres`}
+        </Text>
+      )}
+      <View style={[styles.inputWrap, (hasUrl || overLimit) && styles.inputWrapError]}>
         <TextInput
           placeholder={t('community_add_comment')}
           placeholderTextColor={C.muted}
@@ -55,14 +84,20 @@ export const CommentSection = React.memo(function CommentSection({
           onChangeText={onDraftChange}
           style={styles.input}
           multiline
+          maxLength={MAX_COMMENT_LENGTH + 10}
         />
+        {showCounter && (
+          <Text style={[styles.counter, overLimit && styles.counterOver]}>
+            {MAX_COMMENT_LENGTH - draft.length}
+          </Text>
+        )}
         <Pressable
-          style={[styles.send, draft.trim() && styles.sendActive]}
+          style={[styles.send, canSubmit && styles.sendActive]}
           hitSlop={8}
           onPress={onSubmit}
-          disabled={!draft.trim()}
+          disabled={!canSubmit}
         >
-          <Ionicons name="arrow-up" size={16} color={draft.trim() ? '#FFFFFF' : C.muted} />
+          <Ionicons name="arrow-up" size={16} color={canSubmit ? '#FFFFFF' : C.muted} />
         </Pressable>
       </View>
     </View>
@@ -85,6 +120,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 6,
   },
+  flagBtn: { paddingLeft: 6, paddingTop: 2 },
+  inputError: { fontSize: 12, color: C.like, marginBottom: 4 },
+  inputWrapError: { borderWidth: 1, borderColor: C.like },
+  counter: { fontSize: 12, color: C.sub, marginRight: 6 },
+  counterOver: { color: C.like, fontWeight: '700' },
   input: { flex: 1, minHeight: 36, maxHeight: 80, fontSize: 14, color: C.text, paddingRight: 8 },
   send: {
     width: 30,

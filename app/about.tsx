@@ -1,10 +1,12 @@
 import React from 'react';
-import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
 import { ThemedSafeArea } from '@/components/SafeArea';
 import Constants from 'expo-constants';
 import { useLanguage } from '@/providers/LanguageProvider';
+import { useAuth } from '@/providers/AuthProvider';
+import { supabase } from '@/lib/supabase';
 
 const APP_VERSION = Constants.expoConfig?.version ?? '1.0.0';
 
@@ -31,6 +33,45 @@ const LinkRow = ({ icon, label, sublabel, onPress }: LinkRowProps) => (
 export default function AboutScreen() {
   const { t } = useLanguage();
   const router = useRouter();
+  const { session, signOut } = useAuth();
+
+  const onDeleteAccount = () => {
+    Alert.alert(
+      'Supprimer le compte',
+      'Toutes vos données (prises, profil) seront définitivement supprimées. Cette action est irréversible.',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Supprimer',
+          style: 'destructive',
+          onPress: () => {
+            Alert.alert(
+              'Dernière confirmation',
+              "Êtes-vous absolument sûr ? Il n'y a aucun retour possible.",
+              [
+                { text: 'Annuler', style: 'cancel' },
+                {
+                  text: 'Oui, supprimer définitivement',
+                  style: 'destructive',
+                  onPress: async () => {
+                    if (!session?.user?.id) return;
+                    try {
+                      await supabase.from('catches').delete().eq('user_id', session.user.id);
+                      await supabase.from('profiles').delete().eq('id', session.user.id);
+                      router.replace('/onboarding');
+                      await signOut();
+                    } catch (e: any) {
+                      Alert.alert('Erreur', e?.message ? String(e.message) : 'Impossible de supprimer le compte.');
+                    }
+                  },
+                },
+              ],
+            );
+          },
+        },
+      ],
+    );
+  };
 
   return (
     <ThemedSafeArea style={styles.screen}>
@@ -98,6 +139,15 @@ export default function AboutScreen() {
         <Text style={styles.footer}>
           {t('about_copyright', { year: new Date().getFullYear() })}
         </Text>
+
+        {session && (
+          <Pressable
+            onPress={onDeleteAccount}
+            style={({ pressed }) => [styles.deleteBtn, pressed && { opacity: 0.5 }]}
+          >
+            <Text style={styles.deleteBtnText}>Supprimer mon compte</Text>
+          </Pressable>
+        )}
       </ScrollView>
     </ThemedSafeArea>
   );
@@ -158,4 +208,6 @@ const styles = StyleSheet.create({
   rowSublabel: { fontSize: 12, color: '#9CA3AF' },
   divider: { height: StyleSheet.hairlineWidth, backgroundColor: '#F3F4F6', marginLeft: 64 },
   footer: { fontSize: 12, color: '#D1D5DB', textAlign: 'center', marginTop: 24 },
+  deleteBtn: { alignItems: 'center', paddingVertical: 12, marginTop: 8 },
+  deleteBtnText: { fontSize: 12, color: '#D1D5DB' },
 });

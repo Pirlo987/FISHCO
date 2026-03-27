@@ -5,10 +5,7 @@
   "build": {
     "development": {
       "developmentClient": true,
-      "distribution": "internal",
-      "ios": {
-        "simulator": true
-      }
+      "distribution": "internal"
     },
     "preview": {
       "distribution": "internal",
@@ -26,12 +23,11 @@
   "submit": {
     "production": {
       "ios": {
-        "appleId": "",
-        "ascAppId": "",
-        "appleTeamId": ""
+        "appleId": "brieuc.vannier931@gmail.com",
+        "ascAppId": "6761077524",
+        "appleTeamId": "9PS56XAX7U"
       },
       "android": {
-        "serviceAccountKeyPath": "",
         "track": "production"
       }
     }
