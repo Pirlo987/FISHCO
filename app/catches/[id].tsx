@@ -1,5 +1,6 @@
 import React from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
+import { usePulse } from '@/hooks/usePulse';
 import { Image } from 'expo-image';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -84,11 +85,7 @@ export default function CatchDetailScreen() {
   }, [item, router]);
 
   if (loading) {
-    return (
-      <View style={[styles.center, { flex: 1 }]}> 
-        <ActivityIndicator />
-      </View>
-    );
+    return <CatchDetailSkeleton />;
   }
   if (error || !item) {
     return (
@@ -154,6 +151,21 @@ export default function CatchDetailScreen() {
         ) : null}
       </ParallaxScrollView>
     </>
+  );
+}
+
+function CatchDetailSkeleton() {
+  const opacity = usePulse();
+  return (
+    <View style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
+      <Animated.View style={[{ height: 300, backgroundColor: '#CBD5E1' }, { opacity }]} />
+      <Animated.View style={[{ padding: 20, gap: 16 }, { opacity }]}>
+        <View style={{ height: 26, width: '50%', borderRadius: 8, backgroundColor: '#CBD5E1' }} />
+        <View style={{ flexDirection: 'row', borderRadius: 12, backgroundColor: '#CBD5E1', height: 72 }} />
+        <View style={{ height: 14, width: '70%', borderRadius: 6, backgroundColor: '#CBD5E1' }} />
+        <View style={{ height: 14, width: '50%', borderRadius: 6, backgroundColor: '#CBD5E1' }} />
+      </Animated.View>
+    </View>
   );
 }
 

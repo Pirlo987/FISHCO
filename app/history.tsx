@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  ActivityIndicator,
+  Animated,
   FlatList,
   Pressable,
   RefreshControl,
@@ -8,6 +8,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { usePulse } from '@/hooks/usePulse';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 
@@ -124,9 +125,9 @@ export default function HistoryScreen() {
 
   if (loading) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator />
-      </View>
+      <ThemedSafeArea>
+        <HistorySkeleton />
+      </ThemedSafeArea>
     );
   }
 
@@ -169,6 +170,39 @@ export default function HistoryScreen() {
     </ThemedSafeArea>
   );
 }
+
+function HistorySkeleton() {
+  const opacity = usePulse();
+  return (
+    <View style={{ flex: 1 }}>
+      {Array.from({ length: 8 }).map((_, i) => (
+        <Animated.View key={i} style={[skeletonStyles.row, { opacity }]}>
+          <View style={skeletonStyles.thumb} />
+          <View style={skeletonStyles.lines}>
+            <View style={[skeletonStyles.line, { width: '55%' }]} />
+            <View style={[skeletonStyles.line, { width: '80%', marginTop: 8 }]} />
+          </View>
+        </Animated.View>
+      ))}
+    </View>
+  );
+}
+
+const skeletonStyles = StyleSheet.create({
+  row: {
+    height: ROW_HEIGHT,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: '#E5E7EB',
+    backgroundColor: 'white',
+  },
+  thumb: { width: 64, height: 64, borderRadius: 8, backgroundColor: '#CBD5E1' },
+  lines: { flex: 1, gap: 0 },
+  line: { height: 12, borderRadius: 6, backgroundColor: '#CBD5E1' },
+});
 
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 16 },

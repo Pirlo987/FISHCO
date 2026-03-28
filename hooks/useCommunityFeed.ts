@@ -26,6 +26,7 @@ export function useCommunityFeed() {
   const [reportedIds, setReportedIds] = useState<Set<string>>(new Set());
   const [blockedUserIds, setBlockedUserIds] = useState<Set<string>>(new Set());
   const [reportedCommentIds, setReportedCommentIds] = useState<Set<string>>(new Set());
+  const [savedByMe, setSavedByMe] = useState<Record<string, boolean>>({});
 
   const visibleFeed = useMemo(
     () => feed.filter((item) => !hiddenIds.has(item.id) && !blockedUserIds.has(item.user_id)),
@@ -61,6 +62,24 @@ export function useCommunityFeed() {
     return next;
   }, []);
 
+  const loadMySaves = useCallback(
+    async (ids: string[]) => {
+      if (!session?.user?.id || !ids.length) return {} as Record<string, boolean>;
+      const { data } = await supabase
+        .from('catch_bookmarks')
+        .select('catch_id')
+        .eq('user_id', session.user.id)
+        .in('catch_id', ids);
+      const map: Record<string, boolean> = {};
+      for (const row of data ?? []) {
+        const cid = (row as any)?.catch_id;
+        if (cid) map[cid] = true;
+      }
+      return map;
+    },
+    [session?.user?.id],
+  );
+
   const loadMyLikes = useCallback(
     async (ids: string[]) => {
       if (!session?.user?.id || !ids.length) return {} as Record<string, boolean>;
@@ -77,6 +96,26 @@ export function useCommunityFeed() {
       return map;
     },
     [session?.user?.id],
+  );
+
+  const toggleSave = useCallback(
+    async (catchId: string) => {
+      if (!session?.user?.id) return;
+      const currentlySaved = savedByMe[catchId] ?? false;
+      setSavedByMe((prev) => ({ ...prev, [catchId]: !currentlySaved }));
+      if (currentlySaved) {
+        await supabase
+          .from('catch_bookmarks')
+          .delete()
+          .eq('catch_id', catchId)
+          .eq('user_id', session.user.id);
+      } else {
+        await supabase
+          .from('catch_bookmarks')
+          .upsert({ catch_id: catchId, user_id: session.user.id });
+      }
+    },
+    [savedByMe, session?.user?.id],
   );
 
   const fetchFeed = useCallback(async () => {
@@ -107,19 +146,21 @@ export function useCommunityFeed() {
       setCommentsById(nextComments);
 
       const ids = rows.map((r) => r.id);
-      const [commentMap, likedMap] = await Promise.all([
+      const [commentMap, likedMap, savedMap] = await Promise.all([
         loadComments(ids),
         loadMyLikes(ids),
+        loadMySaves(ids),
       ]);
       setCommentsList(commentMap);
       setLikedByMe(likedMap);
+      setSavedByMe(savedMap);
     } catch (e: any) {
       setError(e?.message ?? 'Flux indisponible');
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [loadComments, loadMyLikes]);
+  }, [loadComments, loadMyLikes, loadMySaves]);
 
   useEffect(() => {
     fetchFeed();
@@ -267,5 +308,7 @@ export function useCommunityFeed() {
     blockUser,
     reportComment,
     reportedCommentIds,
+    savedByMe,
+    toggleSave,
   } as const;
 }

@@ -47,16 +47,20 @@ type Props = {
   liked: boolean;
   likeCount: number;
   commentCount: number;
+  saved: boolean;
   onToggleLike: () => void;
   onToggleComments: () => void;
+  onToggleSave: () => void;
 };
 
 export const ActionBar = React.memo(function ActionBar({
   liked,
   likeCount,
   commentCount,
+  saved,
   onToggleLike,
   onToggleComments,
+  onToggleSave,
 }: Props) {
   return (
     <View style={styles.actions}>
@@ -73,7 +77,13 @@ export const ActionBar = React.memo(function ActionBar({
         </View>
         <ActionButton icon="paper-plane-outline" />
       </View>
-      <ActionButton icon="bookmark-outline" activeIcon="bookmark" />
+      <ActionButton
+        icon="bookmark-outline"
+        activeIcon="bookmark"
+        isActive={saved}
+        activeColor="#0F172A"
+        onPress={onToggleSave}
+      />
     </View>
   );
 });

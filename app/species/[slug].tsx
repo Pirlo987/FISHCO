@@ -1,5 +1,6 @@
 import React from 'react';
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions, Image as RNImage } from 'react-native';
+import { Animated, Modal, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions, Image as RNImage } from 'react-native';
+import { usePulse } from '@/hooks/usePulse';
 import { Image } from 'expo-image';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -386,9 +387,7 @@ if (Array.isArray(record?.regions) && record.regions.length > 0) {
     <>
       <Stack.Screen options={{ headerShown: false }} />
       {loading ? (
-        <View style={[styles.center, { flex: 1 }]}> 
-          <ActivityIndicator />
-        </View>
+        <SpeciesDetailSkeleton />
       ) : error ? (
         <View style={[styles.center, { flex: 1 }]}> 
           <ThemedText>Erreur: {error}</ThemedText>
@@ -554,6 +553,34 @@ if (Array.isArray(record?.regions) && record.regions.length > 0) {
         </>
       )}
     </>
+  );
+}
+
+function SpeciesDetailSkeleton() {
+  const opacity = usePulse();
+  return (
+    <View style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
+      {/* Header image */}
+      <Animated.View style={[{ height: 280, backgroundColor: '#CBD5E1' }, { opacity }]} />
+      {/* Content */}
+      <Animated.View style={[{ padding: 20, gap: 16 }, { opacity }]}>
+        {/* Title + latin name */}
+        <View style={{ gap: 10 }}>
+          <View style={{ height: 28, width: '55%', borderRadius: 8, backgroundColor: '#CBD5E1' }} />
+          <View style={{ height: 14, width: '40%', borderRadius: 6, backgroundColor: '#CBD5E1' }} />
+        </View>
+        {/* Stats row */}
+        <View style={{ flexDirection: 'row', gap: 10 }}>
+          {[1, 2, 3].map((i) => (
+            <View key={i} style={{ flex: 1, height: 60, borderRadius: 12, backgroundColor: '#CBD5E1' }} />
+          ))}
+        </View>
+        {/* Info rows */}
+        {[1, 2, 3, 4].map((i) => (
+          <View key={i} style={{ height: 44, borderRadius: 10, backgroundColor: '#CBD5E1' }} />
+        ))}
+      </Animated.View>
+    </View>
   );
 }
 

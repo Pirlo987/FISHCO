@@ -1,6 +1,5 @@
 import React from 'react';
 import {
-  ActivityIndicator,
   Animated,
   Easing,
   Pressable,
@@ -8,6 +7,7 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
+import { usePulse } from '@/hooks/usePulse';
 import { useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -461,9 +461,7 @@ export default function HomeScreen() {
           </View>
 
           {loadingCatches ? (
-            <View style={styles.loaderBox}>
-              <ActivityIndicator size="large" color={C.blue} />
-            </View>
+            <HomeCatchesSkeleton />
           ) : recentCatches.length === 0 ? (
             <View style={styles.emptyBox}>
               <Ionicons name="fish-outline" size={36} color={C.slateLight} />
@@ -541,17 +539,11 @@ export default function HomeScreen() {
                   {weather?.label ?? t('home_location')}
                 </ThemedText>
               </View>
-              {loadingWeather ? (
-                <ActivityIndicator size="small" color={C.blue} />
-              ) : (
-                <Ionicons name="partly-sunny" size={28} color={C.blue} />
-              )}
+              {!loadingWeather && <Ionicons name="partly-sunny" size={28} color={C.blue} />}
             </View>
 
             {loadingWeather && !weather ? (
-              <View style={styles.weatherLoading}>
-                <ActivityIndicator size="large" color={C.blue} />
-              </View>
+              <HomeWeatherSkeleton />
             ) : weather ? (
               <>
                 <View style={styles.tempRow}>
@@ -593,6 +585,37 @@ export default function HomeScreen() {
         <View style={{ height: 40 }} />
       </ScrollView>
     </View>
+  );
+}
+
+function HomeCatchesSkeleton() {
+  const opacity = usePulse();
+  return (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} scrollEnabled={false} contentContainerStyle={{ gap: 12 }}>
+      {[1, 2, 3].map((i) => (
+        <Animated.View key={i} style={[{ width: 180, borderRadius: 14, overflow: 'hidden', backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0' }, { opacity }]}>
+          <View style={{ width: 180, height: 160, backgroundColor: '#CBD5E1' }} />
+          <View style={{ padding: 12, gap: 8 }}>
+            <View style={{ height: 14, width: '60%', borderRadius: 6, backgroundColor: '#CBD5E1' }} />
+            <View style={{ height: 10, width: '40%', borderRadius: 5, backgroundColor: '#CBD5E1' }} />
+          </View>
+        </Animated.View>
+      ))}
+    </ScrollView>
+  );
+}
+
+function HomeWeatherSkeleton() {
+  const opacity = usePulse();
+  return (
+    <Animated.View style={[{ paddingVertical: 16, gap: 14 }, { opacity }]}>
+      <View style={{ height: 40, width: '45%', borderRadius: 10, backgroundColor: '#CBD5E1' }} />
+      <View style={{ flexDirection: 'row', gap: 12 }}>
+        {[1, 2, 3].map((i) => (
+          <View key={i} style={{ flex: 1, height: 48, borderRadius: 10, backgroundColor: '#CBD5E1' }} />
+        ))}
+      </View>
+    </Animated.View>
   );
 }
 

@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  ActivityIndicator,
+  Animated,
   FlatList,
   Pressable,
   RefreshControl,
@@ -8,6 +8,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { usePulse } from '@/hooks/usePulse';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { ThemedSafeArea } from '@/components/SafeArea';
@@ -44,6 +45,8 @@ export default function CommunityScreen() {
     blockUser,
     reportComment,
     reportedCommentIds,
+    savedByMe,
+    toggleSave,
   } = useCommunityFeed();
 
   const [menuCatch, setMenuCatch] = React.useState<{ id: string; userId: string } | null>(null);
@@ -78,6 +81,7 @@ export default function CommunityScreen() {
         likeCount={likesById[item.id] ?? 0}
         commentCount={commentsById[item.id] ?? 0}
         liked={likedByMe[item.id] ?? false}
+        saved={savedByMe[item.id] ?? false}
         photoRatio={photoRatios[item.id] ?? 4 / 5}
         comments={commentsList[item.id] ?? []}
         commentDraft={commentDrafts[item.id] ?? ''}
@@ -90,6 +94,7 @@ export default function CommunityScreen() {
         onPhotoRatio={onPhotoRatio}
         onOpenMenu={(id) => handleOpenMenu(id, item.user_id)}
         onReportComment={reportComment}
+        onToggleSave={toggleSave}
       />
     ),
     [
@@ -108,6 +113,8 @@ export default function CommunityScreen() {
       onPhotoRatio,
       handleOpenMenu,
       reportComment,
+      savedByMe,
+      toggleSave,
     ],
   );
 
@@ -144,10 +151,7 @@ export default function CommunityScreen() {
 
       {/* Content */}
       {loading ? (
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color={C.accent} />
-          <Text style={styles.loadingText}>{t('community_loading')}</Text>
-        </View>
+        <CommunitySkeleton />
       ) : (
         <FlatList
           data={feed}
@@ -190,6 +194,39 @@ export default function CommunityScreen() {
         onClose={handleCloseMenu}
       />
     </ThemedSafeArea>
+  );
+}
+
+function CommunitySkeleton() {
+  const opacity = usePulse();
+  return (
+    <View style={{ flex: 1 }}>
+      {[1, 2, 3].map((i) => (
+        <Animated.View key={i} style={[{ backgroundColor: '#FFFFFF', marginBottom: 8, padding: 16, gap: 14 }, { opacity }]}>
+          {/* Header avatar + name */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <View style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: '#CBD5E1' }} />
+            <View style={{ flex: 1, gap: 8 }}>
+              <View style={{ height: 12, width: '40%', borderRadius: 5, backgroundColor: '#CBD5E1' }} />
+              <View style={{ height: 10, width: '60%', borderRadius: 5, backgroundColor: '#CBD5E1' }} />
+            </View>
+          </View>
+          {/* Stats row */}
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            {[1, 2, 3].map((j) => (
+              <View key={j} style={{ flex: 1, height: 36, borderRadius: 8, backgroundColor: '#CBD5E1' }} />
+            ))}
+          </View>
+          {/* Photo */}
+          <View style={{ height: 220, borderRadius: 12, backgroundColor: '#CBD5E1' }} />
+          {/* Actions */}
+          <View style={{ flexDirection: 'row', gap: 16 }}>
+            <View style={{ height: 20, width: 50, borderRadius: 6, backgroundColor: '#CBD5E1' }} />
+            <View style={{ height: 20, width: 50, borderRadius: 6, backgroundColor: '#CBD5E1' }} />
+          </View>
+        </Animated.View>
+      ))}
+    </View>
   );
 }
 

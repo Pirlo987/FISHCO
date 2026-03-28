@@ -569,6 +569,17 @@ export default function ProfileSettingsScreen() {
               <View style={styles.card}>
                 <Pressable
                   style={({ pressed }) => [styles.navRow, pressed && styles.navRowPressed]}
+                  onPress={() => router.push('/saved-posts')}
+                >
+                  <View style={[styles.navIcon, { backgroundColor: '#F1F5F9' }]}>
+                    <Ionicons name="bookmark-outline" size={18} color="#0F172A" />
+                  </View>
+                  <Text style={styles.navLabel} numberOfLines={1}>Posts enregistrés</Text>
+                  <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
+                </Pressable>
+                <View style={styles.navDivider} />
+                <Pressable
+                  style={({ pressed }) => [styles.navRow, pressed && styles.navRowPressed]}
                   onPress={() => router.push('/(onboarding)/import-catches?from=settings')}
                 >
                   <View style={[styles.navIcon, { backgroundColor: '#EFF6FF' }]}>

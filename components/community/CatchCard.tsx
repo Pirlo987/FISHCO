@@ -14,6 +14,7 @@ type Props = {
   likeCount: number;
   commentCount: number;
   liked: boolean;
+  saved: boolean;
   photoRatio: number;
   comments: CommentRow[];
   commentDraft: string;
@@ -26,6 +27,7 @@ type Props = {
   onPhotoRatio: (id: string, ratio: number) => void;
   onOpenMenu: (id: string) => void;
   onReportComment: (commentId: string) => void;
+  onToggleSave: (id: string) => void;
 };
 
 export const CatchCard = React.memo(function CatchCard({
@@ -33,6 +35,7 @@ export const CatchCard = React.memo(function CatchCard({
   likeCount,
   commentCount,
   liked,
+  saved,
   photoRatio,
   comments,
   commentDraft,
@@ -45,6 +48,7 @@ export const CatchCard = React.memo(function CatchCard({
   onPhotoRatio,
   onOpenMenu,
   onReportComment,
+  onToggleSave,
 }: Props) {
   const name = displayName(item.profiles);
   const photo = catchPhotoUrl(item.photo_path);
@@ -108,8 +112,10 @@ export const CatchCard = React.memo(function CatchCard({
         liked={liked}
         likeCount={likeCount}
         commentCount={commentCount}
+        saved={saved}
         onToggleLike={() => onToggleLike(item.id)}
         onToggleComments={() => onToggleComments(item.id)}
+        onToggleSave={() => onToggleSave(item.id)}
       />
 
       {/* Comments */}

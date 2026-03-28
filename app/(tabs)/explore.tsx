@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  ActivityIndicator,
+  Animated,
   FlatList,
   Pressable,
   ScrollView,
@@ -15,6 +15,7 @@ import { useRouter } from 'expo-router';
 import { setStatusBarStyle } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useFocusEffect } from '@react-navigation/native';
 import { events } from '@/lib/events';
 
@@ -35,6 +36,7 @@ export default function ExploreScreen() {
   const { session } = useAuth();
   const { isPremium, isLoading: isPremiumLoading } = usePremium();
   useSafeAreaInsets();
+  const tabBarHeight = useBottomTabBarHeight();
 
   useFocusEffect(
     React.useCallback(() => {
@@ -434,14 +436,6 @@ export default function ExploreScreen() {
     return () => clearTimeout(timer);
   }, [scrollTarget, filtered, rowHeight]);
 
-  const getItemLayout = React.useCallback(
-    (_: ArrayLike<Species> | null | undefined, index: number) => {
-      const row = Math.floor(index / 3);
-      return { index, length: rowHeight, offset: row * rowHeight };
-    },
-    [rowHeight],
-  );
-
   const onScrollToIndexFailed = React.useCallback(
     (info: { index: number; averageItemLength: number }) => {
       const row = Math.floor(info.index / 3);
@@ -554,25 +548,21 @@ export default function ExploreScreen() {
         </View>
 
         {loading ? (
-          <View style={styles.center}>
-            <ActivityIndicator size="large" color="#0F172A" />
-          </View>
+          <FishdexSkeleton tileW={tileW} padding={padding} gap={gap} tabBarHeight={tabBarHeight} />
         ) : (
           <FlatList
             ref={listRef}
             style={{ flex: 1 }}
-            contentContainerStyle={{ padding: padding, paddingBottom: 24 }}
+            contentContainerStyle={{ padding: padding, paddingBottom: 24 + tabBarHeight }}
             data={filtered}
             keyExtractor={(item) => normalizeName(item.name)}
             numColumns={3}
             columnWrapperStyle={{ gap }}
             onEndReached={() => {}}
-            getItemLayout={getItemLayout}
             onScrollToIndexFailed={onScrollToIndexFailed}
-            windowSize={5}
+            windowSize={10}
             maxToRenderPerBatch={9}
             initialNumToRender={18}
-            removeClippedSubviews
             renderItem={({ item }) => {
               const key = normalizeName(item.name);
               const isDiscovered = verifiedDiscovered.has(key);
@@ -629,6 +619,63 @@ export default function ExploreScreen() {
     </ThemedSafeArea>
   );
 }
+
+function FishdexSkeleton({
+  tileW,
+  padding,
+  gap,
+  tabBarHeight,
+}: {
+  tileW: number;
+  padding: number;
+  gap: number;
+  tabBarHeight: number;
+}) {
+  const pulse = React.useRef(new Animated.Value(0)).current;
+
+  React.useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1, duration: 800, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0, duration: 800, useNativeDriver: true }),
+      ])
+    ).start();
+  }, [pulse]);
+
+  const opacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.35, 0.7] });
+
+  const ROWS = 6;
+  const COLS = 3;
+
+  return (
+    <View style={{ flex: 1, padding, paddingBottom: 24 + tabBarHeight }}>
+      {Array.from({ length: ROWS }).map((_, row) => (
+        <View key={row} style={{ flexDirection: 'row', gap, marginBottom: 12 }}>
+          {Array.from({ length: COLS }).map((_, col) => (
+            <Animated.View key={col} style={{ opacity, width: tileW }}>
+              <View style={[skeletonStyles.tile, { width: tileW, height: tileW }]} />
+              <View style={[skeletonStyles.label, { width: tileW * 0.6 }]} />
+            </Animated.View>
+          ))}
+        </View>
+      ))}
+    </View>
+  );
+}
+
+const skeletonStyles = StyleSheet.create({
+  tile: {
+    borderRadius: 12,
+    backgroundColor: '#CBD5E1',
+  },
+  label: {
+    height: 10,
+    borderRadius: 6,
+    backgroundColor: '#CBD5E1',
+    marginTop: 8,
+    alignSelf: 'center',
+  },
+});
 
 type SpeciesTileProps = {
   item: Species;

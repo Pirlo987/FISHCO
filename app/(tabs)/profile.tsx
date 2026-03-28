@@ -1,5 +1,7 @@
 import React from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { BarChart, PieChart } from 'react-native-gifted-charts';
+import { usePulse } from '@/hooks/usePulse';
 import { useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -32,6 +34,39 @@ type CatchSummary = {
   caught_at: string;
   photo_path: string | null;
 };
+
+const CHART_COLORS = ['#0F172A', '#3B82F6', '#10B981', '#F59E0B', '#EF4444'];
+
+type MonthBar = { value: number; label: string; frontColor: string };
+type SpeciesSlice = { value: number; color: string; label: string };
+
+function buildMonthlyData(catches: { caught_at: string }[]): MonthBar[] {
+  const now = new Date();
+  return Array.from({ length: 12 }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth() - 11 + i, 1);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const label = d.toLocaleDateString('fr-FR', { month: 'short' }).replace('.', '');
+    const value = catches.filter((c) => c.caught_at.startsWith(key)).length;
+    return { value, label, frontColor: '#0F172A' };
+  });
+}
+
+function buildSpeciesData(catches: { species: string | null }[]): SpeciesSlice[] {
+  const counts: Record<string, number> = {};
+  for (const c of catches) {
+    const s = c.species?.trim() || 'Inconnue';
+    counts[s] = (counts[s] ?? 0) + 1;
+  }
+  const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  const top = sorted.slice(0, 5).map(([label, value], i) => ({
+    value,
+    color: CHART_COLORS[i],
+    label,
+  }));
+  const rest = sorted.slice(5).reduce((sum, [, v]) => sum + v, 0);
+  if (rest > 0) top.push({ value: rest, color: '#CBD5E1', label: 'Autres' });
+  return top;
+}
 
 const LEVEL_LABELS: Record<string, string> = {
   beginner: 'Débutant',
@@ -87,6 +122,8 @@ export default function ProfileScreen() {
   const [biggestCatch, setBiggestCatch] = React.useState<CatchSummary | null>(null);
   const [longestCatch, setLongestCatch] = React.useState<CatchSummary | null>(null);
   const [recentCatches, setRecentCatches] = React.useState<CatchSummary[]>([]);
+  const [monthlyData, setMonthlyData] = React.useState<MonthBar[]>([]);
+  const [speciesData, setSpeciesData] = React.useState<SpeciesSlice[]>([]);
   const [loading, setLoading] = React.useState(true);
   const { isPremium } = usePremium();
   const [error, setError] = React.useState<string | null>(null);
@@ -145,6 +182,19 @@ export default function ProfileScreen() {
 
       if (recentError) throw recentError;
       setRecentCatches((recentData ?? []) as CatchSummary[]);
+
+      const twelveMonthsAgo = new Date();
+      twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 11);
+      twelveMonthsAgo.setDate(1);
+      const { data: chartData } = await supabase
+        .from('catches')
+        .select('caught_at,species')
+        .eq('user_id', session.user.id)
+        .gte('caught_at', twelveMonthsAgo.toISOString());
+
+      setMonthlyData(buildMonthlyData((chartData ?? []) as { caught_at: string }[]));
+      setSpeciesData(buildSpeciesData((chartData ?? []) as { species: string | null }[]));
+
       hasLoadedOnce.current = true;
     } catch (e: any) {
       setError(e?.message ? String(e.message) : 'Chargement impossible');
@@ -214,9 +264,7 @@ export default function ProfileScreen() {
     <ThemedSafeArea>
       <ScrollView contentContainerStyle={styles.container}>
         {loading ? (
-          <View style={styles.center}>
-            <ActivityIndicator />
-          </View>
+          <ProfileSkeleton />
         ) : (
           <>
             {error ? (
@@ -240,14 +288,14 @@ export default function ProfileScreen() {
                 </View>
               )}
               <View style={{ flex: 1 }}>
-                <Text style={styles.name}>{usernameLabel}</Text>
+                <Text style={styles.name}>{realName || usernameLabel}</Text>
+                {profile?.username ? <Text style={styles.subName}>@{profile.username}</Text> : null}
                 {isPremium && (
                   <View style={styles.premiumBadge}>
                     <Ionicons name="star" size={11} color="#92400e" />
                     <Text style={styles.premiumBadgeText}>Premium</Text>
                   </View>
                 )}
-                {realName ? <Text style={styles.subName}>{realName}</Text> : null}
               </View>
               <Pressable onPress={openInfo} style={styles.settingsButton} hitSlop={12}>
                 <Ionicons name="settings-outline" size={22} color="#111827" />
@@ -262,6 +310,59 @@ export default function ProfileScreen() {
                 </View>
               ))}
             </View>
+
+            {/* Chart: activité mensuelle */}
+            {monthlyData.some((d) => d.value > 0) && (
+              <View style={styles.card}>
+                <Text style={styles.chartTitle}>Activité mensuelle</Text>
+                <BarChart
+                  data={monthlyData}
+                  barWidth={18}
+                  spacing={6}
+                  roundedTop
+                  hideRules
+                  xAxisThickness={0}
+                  yAxisThickness={0}
+                  noOfSections={3}
+                  labelWidth={28}
+                  xAxisLabelTextStyle={{ fontSize: 9, color: '#9CA3AF' }}
+                  height={110}
+                  maxValue={Math.max(...monthlyData.map((d) => d.value), 4)}
+                />
+              </View>
+            )}
+
+            {/* Chart: répartition espèces */}
+            {speciesData.length > 0 && (
+              <View style={styles.card}>
+                <Text style={styles.chartTitle}>Espèces pêchées</Text>
+                <View style={styles.pieRow}>
+                  <PieChart
+                    data={speciesData}
+                    donut
+                    radius={70}
+                    innerRadius={48}
+                    centerLabelComponent={() => (
+                      <View style={{ alignItems: 'center' }}>
+                        <Text style={{ fontSize: 20, fontWeight: '700', color: '#111827' }}>
+                          {speciesData.reduce((s, d) => s + d.value, 0)}
+                        </Text>
+                        <Text style={{ fontSize: 10, color: '#6B7280' }}>prises</Text>
+                      </View>
+                    )}
+                  />
+                  <View style={styles.pieLegend}>
+                    {speciesData.map((item, i) => (
+                      <View key={i} style={styles.pieLegendRow}>
+                        <View style={[styles.pieDot, { backgroundColor: item.color }]} />
+                        <Text numberOfLines={1} style={styles.pieLegendLabel}>{item.label}</Text>
+                        <Text style={styles.pieLegendCount}>{item.value}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              </View>
+            )}
 
             <Pressable onPress={onOpenHistory} style={({ pressed }) => [styles.card, styles.historyCard, pressed && styles.pressedCard]}>
               <View style={styles.historyHeader}>
@@ -304,6 +405,46 @@ export default function ProfileScreen() {
   );
 }
 
+function ProfileSkeleton() {
+  const opacity = usePulse();
+  return (
+    <Animated.View style={[{ padding: 16, gap: 16 }, { opacity }]}>
+      {/* Header */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
+        <View style={{ width: 96, height: 96, borderRadius: 48, backgroundColor: '#CBD5E1' }} />
+        <View style={{ flex: 1, gap: 10 }}>
+          <View style={{ height: 20, width: '60%', borderRadius: 8, backgroundColor: '#CBD5E1' }} />
+          <View style={{ height: 14, width: '40%', borderRadius: 6, backgroundColor: '#CBD5E1' }} />
+        </View>
+      </View>
+
+      {/* Stats block */}
+      <View style={{ flexDirection: 'row', backgroundColor: '#F8FAFC', borderRadius: 16, paddingVertical: 20 }}>
+        {[1, 2, 3].map((i) => (
+          <View key={i} style={{ flex: 1, alignItems: 'center', gap: 8 }}>
+            <View style={{ height: 10, width: '50%', borderRadius: 5, backgroundColor: '#CBD5E1' }} />
+            <View style={{ height: 28, width: '40%', borderRadius: 8, backgroundColor: '#CBD5E1' }} />
+          </View>
+        ))}
+      </View>
+
+      {/* History card */}
+      <View style={{ backgroundColor: '#F8FAFC', borderRadius: 12, padding: 16, gap: 14 }}>
+        <View style={{ height: 16, width: '35%', borderRadius: 6, backgroundColor: '#CBD5E1' }} />
+        {[1, 2, 3].map((i) => (
+          <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <View style={{ width: 52, height: 52, borderRadius: 10, backgroundColor: '#CBD5E1' }} />
+            <View style={{ flex: 1, gap: 8 }}>
+              <View style={{ height: 12, width: '50%', borderRadius: 5, backgroundColor: '#CBD5E1' }} />
+              <View style={{ height: 10, width: '70%', borderRadius: 5, backgroundColor: '#CBD5E1' }} />
+            </View>
+          </View>
+        ))}
+      </View>
+    </Animated.View>
+  );
+}
+
 const styles = StyleSheet.create({
   container: { padding: 16, gap: 16 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
@@ -319,7 +460,7 @@ const styles = StyleSheet.create({
   },
   avatarInitials: { fontSize: 24, fontWeight: '700', color: '#4B5563' },
   name: { fontSize: 24, fontWeight: '700' },
-  subName: { color: '#4B5563', fontSize: 18, marginTop: 4, fontWeight: '600' },
+  subName: { color: '#6B7280', fontSize: 14, marginTop: 2, fontWeight: '500' },
   premiumBadge: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', backgroundColor: '#fef3c7', borderWidth: 1, borderColor: '#f59e0b', borderRadius: 20, paddingHorizontal: 8, paddingVertical: 3, marginTop: 4, gap: 4 },
   premiumBadgeText: { color: '#92400e', fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
   settingsButton: {
@@ -354,6 +495,13 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 18, fontWeight: '600' },
   errorCard: { borderColor: '#fecaca', backgroundColor: '#fee2e2' },
   errorText: { color: '#b91c1c' },
+  chartTitle: { fontSize: 14, fontWeight: '700', color: '#111827', marginBottom: 12 },
+  pieRow: { flexDirection: 'row', alignItems: 'center', gap: 20 },
+  pieLegend: { flex: 1, gap: 8 },
+  pieLegendRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  pieDot: { width: 10, height: 10, borderRadius: 5 },
+  pieLegendLabel: { flex: 1, fontSize: 12, color: '#374151' },
+  pieLegendCount: { fontSize: 12, fontWeight: '700', color: '#111827' },
   historyCard: { gap: 10 },
   historyHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   linkText: { color: '#2563EB', fontWeight: '600' },
