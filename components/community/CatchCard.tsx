@@ -28,6 +28,7 @@ type Props = {
   onOpenMenu: (id: string) => void;
   onReportComment: (commentId: string) => void;
   onToggleSave: (id: string) => void;
+  onPressUser?: (userId: string) => void;
 };
 
 export const CatchCard = React.memo(function CatchCard({
@@ -49,6 +50,7 @@ export const CatchCard = React.memo(function CatchCard({
   onOpenMenu,
   onReportComment,
   onToggleSave,
+  onPressUser,
 }: Props) {
   const name = displayName(item.profiles);
   const photo = catchPhotoUrl(item.photo_path);
@@ -63,8 +65,10 @@ export const CatchCard = React.memo(function CatchCard({
     <View style={styles.card}>
       {/* Header */}
       <View style={styles.header}>
-        <UserAvatar profile={item.profiles} name={name} size={42} />
-        <View style={styles.headerInfo}>
+        <Pressable onPress={() => onPressUser?.(item.user_id)} disabled={!onPressUser} hitSlop={4}>
+          <UserAvatar profile={item.profiles} name={name} size={42} />
+        </Pressable>
+        <Pressable style={styles.headerInfo} onPress={() => onPressUser?.(item.user_id)} disabled={!onPressUser}>
           <View style={styles.nameRow}>
             <Text style={styles.userName} numberOfLines={1}>{name}</Text>
             <View style={styles.locationRow}>
@@ -73,7 +77,7 @@ export const CatchCard = React.memo(function CatchCard({
             </View>
           </View>
           <Text style={styles.meta}>{timeAgo}</Text>
-        </View>
+        </Pressable>
         <Pressable style={styles.moreBtn} hitSlop={10} onPress={() => onOpenMenu(item.id)}>
           <Ionicons name="ellipsis-horizontal" size={18} color={C.muted} />
         </Pressable>

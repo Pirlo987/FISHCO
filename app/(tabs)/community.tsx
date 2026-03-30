@@ -18,9 +18,11 @@ import { CatchCard } from '@/components/community/CatchCard';
 import { PostMenu } from '@/components/community/PostMenu';
 import type { FeedItem } from '@/components/community/types';
 import { useLanguage } from '@/providers/LanguageProvider';
+import { useRouter } from 'expo-router';
 
 export default function CommunityScreen() {
   const { t } = useLanguage();
+  const router = useRouter();
   const {
     feed,
     loading,
@@ -74,6 +76,10 @@ export default function CommunityScreen() {
     if (menuCatch) blockUser(menuCatch.userId);
   }, [menuCatch, blockUser]);
 
+  const handlePressUser = React.useCallback((userId: string) => {
+    router.push(`/user/${userId}`);
+  }, [router]);
+
   const renderItem = React.useCallback(
     ({ item }: { item: FeedItem }) => (
       <CatchCard
@@ -95,6 +101,7 @@ export default function CommunityScreen() {
         onOpenMenu={(id) => handleOpenMenu(id, item.user_id)}
         onReportComment={reportComment}
         onToggleSave={toggleSave}
+        onPressUser={handlePressUser}
       />
     ),
     [
@@ -115,6 +122,7 @@ export default function CommunityScreen() {
       reportComment,
       savedByMe,
       toggleSave,
+      handlePressUser,
     ],
   );
 
