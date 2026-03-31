@@ -107,7 +107,7 @@ export default function AboutScreen() {
             icon="document-text-outline"
             label={t('about_terms')}
             sublabel="fishbook.app/terms"
-            onPress={() => Linking.openURL('https://fishbook.app/terms')}
+            onPress={() => Linking.openURL('https://pirlo987.github.io/FISHCO/terms.html')}
           />
         </View>
 
