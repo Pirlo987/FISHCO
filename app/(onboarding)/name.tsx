@@ -15,12 +15,14 @@ import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/providers/AuthProvider';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemedSafeArea } from '@/components/SafeArea';
 import { mergeProfileDraft, readProfileDraft } from '@/lib/profileDraft';
 import { useLanguage } from '@/providers/LanguageProvider';
 
 export default function NameStep() {
   const { t } = useLanguage();
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const { session } = useAuth();
   const [firstName, setFirstName] = React.useState('');
@@ -101,7 +103,7 @@ export default function NameStep() {
   };
 
   return (
-    <ThemedSafeArea edges={['top', 'bottom']} style={{ backgroundColor: '#ffffff' }}>
+    <ThemedSafeArea edges={['top']} style={{ backgroundColor: '#ffffff' }}>
       <KeyboardAvoidingView 
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
         style={{ flex: 1 }}
@@ -214,29 +216,14 @@ export default function NameStep() {
                 </View>
               </View>
 
-              <View style={styles.noteCard}>
-                <View style={styles.noteAccent} />
-                <View style={styles.noteContent}>
-                  <Text style={styles.noteIcon}>🔒</Text>
-                  <Text style={styles.noteText}>{t('onboard_name_private')}</Text>
-                </View>
-              </View>
             </View>
           </ScrollView>
 
-          <View style={styles.footer}>
+          <View style={[styles.footer, { paddingBottom: insets.bottom + 50 }]}>
             <Pressable style={styles.primaryWrapper} onPress={onNext}>
-              <LinearGradient
-                colors={['#1E3A5F', '#0F2744']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.primaryButton}
-              >
+              <View style={styles.primaryButton}>
                 <Text style={styles.primaryText}>{t('onboard_continue')}</Text>
-                <View style={styles.arrowWrapper}>
-                  <Text style={styles.arrowIcon}>→</Text>
-                </View>
-              </LinearGradient>
+              </View>
             </Pressable>
           </View>
         </View>
@@ -327,73 +314,33 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
   },
-  noteCard: {
-    flexDirection: 'row',
-    backgroundColor: '#F8FAFC',
-    borderRadius: 14,
-    overflow: 'hidden',
-  },
-  noteAccent: {
-    width: 4,
-    backgroundColor: '#3B82F6',
-  },
-  noteContent: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-  },
-  noteIcon: { 
-    fontSize: 16,
-  },
-  noteText: { 
-    flex: 1,
-    color: '#475569', 
-    fontSize: 13, 
-    lineHeight: 19,
-    fontWeight: '500',
-  },
-  footer: { 
+  footer: {
     paddingHorizontal: 24,
     paddingTop: 12,
-    paddingBottom: 28,
     backgroundColor: '#ffffff',
+    zIndex: 10,
   },
   primaryWrapper: {
     borderRadius: 16,
     overflow: 'hidden',
-    shadowColor: '#1E3A5F',
+    shadowColor: '#0f172a',
     shadowOpacity: 0.25,
     shadowRadius: 20,
     shadowOffset: { width: 0, height: 10 },
     elevation: 8,
   },
-  primaryButton: { 
+  primaryButton: {
     paddingVertical: 18,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
+    backgroundColor: '#0f172a',
   },
   primaryText: { 
     color: '#ffffff', 
     fontWeight: '800', 
     fontSize: 17,
     letterSpacing: 0.3,
-  },
-  arrowWrapper: {
-    width: 28,
-    height: 28,
-    borderRadius: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  arrowIcon: {
-    color: '#ffffff',
-    fontSize: 18,
-    fontWeight: '700',
   },
 });

@@ -1,12 +1,19 @@
 import React from 'react';
 import {
+  Alert,
   Animated,
   Easing,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
+  Text,
+  TextInput,
   View,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { usePulse } from '@/hooks/usePulse';
 import { useRouter } from 'expo-router';
 import { Image } from 'expo-image';
@@ -142,6 +149,41 @@ export default function HomeScreen() {
 
   const animatedPoints = React.useRef(new Animated.Value(0)).current;
   const [displayPoints, setDisplayPoints] = React.useState(0);
+
+  // ── Feedback ──
+  const [feedbackVisible, setFeedbackVisible] = React.useState(false);
+  const [feedbackTitle, setFeedbackTitle] = React.useState('');
+  const [feedbackBody, setFeedbackBody] = React.useState('');
+  const [feedbackLoading, setFeedbackLoading] = React.useState(false);
+
+  const openFeedback = React.useCallback(() => {
+    setFeedbackTitle('');
+    setFeedbackBody('');
+    setFeedbackVisible(true);
+  }, []);
+
+  const submitFeedback = React.useCallback(async () => {
+    if (!feedbackTitle.trim()) {
+      Alert.alert('Titre requis', 'Merci d\'ajouter un titre à ton retour.');
+      return;
+    }
+    if (!session?.user?.id) return;
+    setFeedbackLoading(true);
+    try {
+      await supabase.from('feedbacks').insert({
+        user_id: session.user.id,
+        title: feedbackTitle.trim(),
+        body: feedbackBody.trim() || null,
+        created_at: new Date().toISOString(),
+      });
+      setFeedbackVisible(false);
+      Alert.alert('Merci !', 'Ton retour a bien été envoyé.');
+    } catch {
+      Alert.alert('Erreur', 'Impossible d\'envoyer le retour, réessaie plus tard.');
+    } finally {
+      setFeedbackLoading(false);
+    }
+  }, [session, feedbackTitle, feedbackBody]);
 
   const formatTemperature = React.useCallback(
     (value: number | null | undefined) => {
@@ -373,7 +415,12 @@ export default function HomeScreen() {
   }, [router]);
 
   return (
-    <View style={[styles.root, { paddingTop: insets.top + 20 }]}>
+    <LinearGradient
+      colors={['#DBEAFE', '#EFF6FF', '#F5F8FC']}
+      start={{ x: 0.5, y: 0 }}
+      end={{ x: 0.5, y: 0.4 }}
+      style={[styles.root, { paddingTop: insets.top + 20 }]}
+    >
       <ScrollView
         style={styles.content}
         contentContainerStyle={styles.contentContainer}
@@ -527,6 +574,28 @@ export default function HomeScreen() {
           )}
         </View>
 
+        {/* ── Actualités ── */}
+        <View style={styles.section}>
+          <ThemedText style={styles.sectionLabel}>Actualités</ThemedText>
+          <View style={styles.newsCard}>
+            <Image
+              source={require('@/assets/images/fond_actualite.jpg')}
+              style={StyleSheet.absoluteFill}
+              contentFit="cover"
+              blurRadius={2}
+            />
+            <View style={styles.newsOverlay}>
+              <View style={styles.newsBetaBadge}>
+                <ThemedText style={styles.newsBetaText}>BÊTA</ThemedText>
+              </View>
+              <ThemedText style={styles.newsTitle}>FishCo est en version Bêta</ThemedText>
+              <ThemedText style={styles.newsSub}>
+                L'application est encore en cours de développement. Merci d'être parmi nos premiers testeurs — vos retours sont précieux !
+              </ThemedText>
+            </View>
+          </View>
+        </View>
+
         {/* ── Weather ── */}
         <View style={styles.section}>
           <ThemedText style={styles.sectionLabel}>{t('home_weather')}</ThemedText>
@@ -582,9 +651,85 @@ export default function HomeScreen() {
           </View>
         </View>
 
+        {/* ── Feedback ── */}
+        <View style={styles.section}>
+          <ThemedText style={styles.sectionLabel}>Ton avis compte</ThemedText>
+          <Pressable
+            style={({ pressed }) => [styles.feedbackCard, { opacity: pressed ? 0.88 : 1 }]}
+            onPress={openFeedback}
+          >
+            <View style={styles.feedbackLeft}>
+              <View style={styles.feedbackIconWrap}>
+                <Ionicons name="chatbubble-ellipses-outline" size={22} color={C.blue} />
+              </View>
+              <View style={styles.feedbackTexts}>
+                <ThemedText style={styles.feedbackTitle}>Retour & signalement</ThemedText>
+                <ThemedText style={styles.feedbackSub}>Un bug ? Une idée ? Dis-nous tout.</ThemedText>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={C.slateLight} />
+          </Pressable>
+        </View>
+
         <View style={{ height: 40 }} />
       </ScrollView>
-    </View>
+
+      {/* ── Modal Feedback ── */}
+      <Modal
+        visible={feedbackVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setFeedbackVisible(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalRoot}
+        >
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Envoyer un retour</Text>
+            <Pressable onPress={() => setFeedbackVisible(false)} style={styles.modalClose}>
+              <Ionicons name="close" size={22} color={C.blueDeep} />
+            </Pressable>
+          </View>
+
+          <ScrollView style={styles.modalBody} keyboardShouldPersistTaps="handled">
+            <Text style={styles.fieldLabel}>Titre *</Text>
+            <TextInput
+              style={styles.textInput}
+              placeholder="ex : Crash sur la page profil"
+              placeholderTextColor={C.slateLight}
+              value={feedbackTitle}
+              onChangeText={setFeedbackTitle}
+              maxLength={100}
+            />
+
+            <Text style={styles.fieldLabel}>Description</Text>
+            <TextInput
+              style={[styles.textInput, styles.textArea]}
+              placeholder="Décris le problème ou ton idée en détail…"
+              placeholderTextColor={C.slateLight}
+              value={feedbackBody}
+              onChangeText={setFeedbackBody}
+              multiline
+              numberOfLines={5}
+              maxLength={1000}
+            />
+
+            <Pressable
+              style={[styles.submitBtn, feedbackLoading && { opacity: 0.6 }]}
+              onPress={submitFeedback}
+              disabled={feedbackLoading}
+            >
+              <Text style={styles.submitText}>
+                {feedbackLoading ? 'Envoi…' : 'Envoyer mon retour'}
+              </Text>
+            </Pressable>
+
+            <View style={{ height: 40 }} />
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </Modal>
+    </LinearGradient>
   );
 }
 
@@ -622,7 +767,6 @@ function HomeWeatherSkeleton() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#F5F8FC',
   },
   content: {
     flex: 1,
@@ -863,6 +1007,50 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 
+  // ── Actualités ──
+  newsCard: {
+    borderRadius: 16,
+    height: 180,
+    overflow: 'hidden',
+  },
+  newsCardImage: {
+    borderRadius: 16,
+  },
+  newsOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+    padding: 20,
+    justifyContent: 'flex-end',
+    gap: 6,
+  },
+  newsBetaBadge: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    backgroundColor: C.blueMid,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  newsBetaText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: C.white,
+    letterSpacing: 1.2,
+  },
+  newsTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: C.white,
+    letterSpacing: -0.2,
+  },
+  newsSub: {
+    fontSize: 13,
+    fontWeight: '400',
+    color: 'rgba(255,255,255,0.75)',
+    lineHeight: 18,
+  },
+
   // ── Weather ──
   weatherCard: {
     borderRadius: 14,
@@ -944,5 +1132,115 @@ const styles = StyleSheet.create({
     color: C.slate,
     textAlign: 'center',
     paddingVertical: 16,
+  },
+
+  // ── Feedback card ──
+  feedbackCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: C.white,
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  feedbackLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    flex: 1,
+  },
+  feedbackIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: C.blueGhost,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  feedbackTexts: {
+    flex: 1,
+  },
+  feedbackTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: C.blueDeep,
+  },
+  feedbackSub: {
+    fontSize: 13,
+    fontWeight: '400',
+    color: C.slate,
+    marginTop: 2,
+  },
+
+  // ── Feedback modal ──
+  modalRoot: {
+    flex: 1,
+    backgroundColor: C.white,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: C.blueDeep,
+  },
+  modalClose: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: C.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalBody: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+  },
+  fieldLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: C.slate,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+    marginBottom: 8,
+    marginTop: 16,
+  },
+  textInput: {
+    backgroundColor: C.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: C.border,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: C.blueDeep,
+  },
+  textArea: {
+    minHeight: 110,
+    textAlignVertical: 'top',
+    paddingTop: 12,
+  },
+  submitBtn: {
+    backgroundColor: C.blueDeep,
+    borderRadius: 14,
+    paddingVertical: 16,
+    alignItems: 'center',
+    marginTop: 28,
+  },
+  submitText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: C.white,
   },
 });

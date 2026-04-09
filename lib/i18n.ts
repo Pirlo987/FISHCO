@@ -12,13 +12,20 @@ const translations = {
     // ---------- Auth shared ----------
     auth_email: 'Email',
     auth_password: 'Mot de passe',
-    auth_password_min: 'Mot de passe (min 6)',
+    auth_password_min: 'Mot de passe (min 8, A-Z, 0-9, !)',
     auth_with_apple: 'Continuer avec Apple',
     auth_with_google: 'Continuer avec Google',
     auth_with_facebook: 'Continuer avec Facebook',
     auth_retry: 'Réessaie dans quelques instants.',
     auth_required_fields: 'Champs requis',
     auth_cancel: 'Annuler',
+    auth_error_email_required: 'L\'email est requis.',
+    auth_error_email_invalid: 'Adresse email invalide.',
+    auth_error_password_required: 'Le mot de passe est requis.',
+    auth_error_password_min: 'Au moins 8 caractères requis.',
+    auth_error_password_uppercase: 'Au moins une lettre majuscule requise.',
+    auth_error_password_number: 'Au moins un chiffre requis.',
+    auth_error_password_special: 'Au moins un caractère spécial requis (ex: !@#$%).',
 
     // ---------- Login ----------
     login_title: 'Connexion',
@@ -304,13 +311,20 @@ const translations = {
     // ---------- Auth shared ----------
     auth_email: 'Email',
     auth_password: 'Password',
-    auth_password_min: 'Password (min 6)',
+    auth_password_min: 'Password (min 8, A-Z, 0-9, !)',
     auth_with_apple: 'Continue with Apple',
     auth_with_google: 'Continue with Google',
     auth_with_facebook: 'Continue with Facebook',
     auth_retry: 'Try again in a moment.',
     auth_required_fields: 'Required fields',
     auth_cancel: 'Cancel',
+    auth_error_email_required: 'Email is required.',
+    auth_error_email_invalid: 'Invalid email address.',
+    auth_error_password_required: 'Password is required.',
+    auth_error_password_min: 'At least 8 characters required.',
+    auth_error_password_uppercase: 'At least one uppercase letter required.',
+    auth_error_password_number: 'At least one number required.',
+    auth_error_password_special: 'At least one special character required (e.g. !@#$%).',
 
     // ---------- Login ----------
     login_title: 'Sign In',

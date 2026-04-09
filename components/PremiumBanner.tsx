@@ -15,13 +15,13 @@ export function PremiumBanner({ onPress }: Props) {
       style={({ pressed }) => [styles.wrapper, { opacity: pressed ? 0.92 : 1 }]}
     >
       <LinearGradient
-        colors={['#78350F', '#B45309', '#D97706']}
+        colors={['#0f172a', '#1e3a5f', '#2563eb']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={styles.gradient}
       >
         <View style={styles.iconWrap}>
-          <Ionicons name="star" size={22} color="#FDE68A" />
+          <Ionicons name="star" size={22} color="#93C5FD" />
         </View>
 
         <View style={styles.textBlock}>
@@ -46,7 +46,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     overflow: 'hidden',
     marginBottom: 28,
-    shadowColor: '#B45309',
+    shadowColor: '#1e3a5f',
     shadowOpacity: 0.25,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 4 },

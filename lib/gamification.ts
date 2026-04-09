@@ -40,6 +40,13 @@ export const titleForPoints = (points: number | null | undefined) => {
   return found?.title ?? LEVEL_TITLES[0].title;
 };
 
+export const levelIndexForPoints = (points: number | null | undefined): number => {
+  if (!points || Number.isNaN(points)) return 1;
+  const sorted = [...LEVEL_TITLES].sort((a, b) => a.min - b.min);
+  const idx = sorted.findLastIndex((t) => points >= t.min);
+  return idx + 1;
+};
+
 const pushAwards = async (targetUserId: string, awards: Award[]) => {
   if (!targetUserId || !awards.length) return;
   const payloads = awards.filter((a) => a.points > 0);

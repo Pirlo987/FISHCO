@@ -1,6 +1,8 @@
 import React from 'react';
 import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { BarChart, PieChart } from 'react-native-gifted-charts';
+import { LinearGradient } from 'expo-linear-gradient';
+import { BarChart } from 'react-native-gifted-charts';
+import DonutChart from '@/components/DonutChart';
 import { usePulse } from '@/hooks/usePulse';
 import { useRouter } from 'expo-router';
 import { Image } from 'expo-image';
@@ -11,6 +13,7 @@ import { ThemedSafeArea } from '@/components/SafeArea';
 import { supabase } from '@/lib/supabase';
 import { useLanguage } from '@/providers/LanguageProvider';
 import { usePremium } from '@/hooks/usePremium';
+import { titleForPoints, levelIndexForPoints } from '@/lib/gamification';
 
 type ProfileRow = {
   first_name: string | null;
@@ -125,6 +128,7 @@ export default function ProfileScreen() {
   const [monthlyData, setMonthlyData] = React.useState<MonthBar[]>([]);
   const [speciesData, setSpeciesData] = React.useState<SpeciesSlice[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [points, setPoints] = React.useState<number | null>(null);
   const { isPremium } = usePremium();
   const [error, setError] = React.useState<string | null>(null);
   const hasLoadedOnce = React.useRef(false);
@@ -195,6 +199,13 @@ export default function ProfileScreen() {
       setMonthlyData(buildMonthlyData((chartData ?? []) as { caught_at: string }[]));
       setSpeciesData(buildSpeciesData((chartData ?? []) as { species: string | null }[]));
 
+      const { data: pts } = await supabase
+        .from('profile_points')
+        .select('points')
+        .eq('user_id', session.user.id)
+        .maybeSingle();
+      setPoints((pts as { points: number } | null)?.points ?? 0);
+
       hasLoadedOnce.current = true;
     } catch (e: any) {
       setError(e?.message ? String(e.message) : 'Chargement impossible');
@@ -261,8 +272,14 @@ export default function ProfileScreen() {
   );
 
   return (
-    <ThemedSafeArea>
-      <ScrollView contentContainerStyle={styles.container}>
+    <ThemedSafeArea style={{ backgroundColor: '#DBEAFE' }}>
+      <LinearGradient
+        colors={['#DBEAFE', '#EFF6FF', '#ffffff']}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 0.45 }}
+        style={{ flex: 1 }}
+      >
+      <ScrollView contentContainerStyle={styles.container} style={{ backgroundColor: 'transparent' }}>
         {loading ? (
           <ProfileSkeleton />
         ) : (
@@ -303,66 +320,23 @@ export default function ProfileScreen() {
             </View>
 
             <View style={styles.statsBlock}>
-              {statsData.map((item, index) => (
-                <View key={item.key} style={[styles.statColumn, index < statsData.length - 1 ? styles.statColumnDivider : null]}>
-                  <Text style={styles.statLabel}>{item.label}</Text>
-                  <Text style={styles.statValue}>{item.value}</Text>
-                </View>
-              ))}
-            </View>
-
-            {/* Chart: activité mensuelle */}
-            {monthlyData.some((d) => d.value > 0) && (
-              <View style={styles.card}>
-                <Text style={styles.chartTitle}>Activité mensuelle</Text>
-                <BarChart
-                  data={monthlyData}
-                  barWidth={18}
-                  spacing={6}
-                  roundedTop
-                  hideRules
-                  xAxisThickness={0}
-                  yAxisThickness={0}
-                  noOfSections={3}
-                  labelWidth={28}
-                  xAxisLabelTextStyle={{ fontSize: 9, color: '#9CA3AF' }}
-                  height={110}
-                  maxValue={Math.max(...monthlyData.map((d) => d.value), 4)}
-                />
-              </View>
-            )}
-
-            {/* Chart: répartition espèces */}
-            {speciesData.length > 0 && (
-              <View style={styles.card}>
-                <Text style={styles.chartTitle}>Espèces pêchées</Text>
-                <View style={styles.pieRow}>
-                  <PieChart
-                    data={speciesData}
-                    donut
-                    radius={70}
-                    innerRadius={48}
-                    centerLabelComponent={() => (
-                      <View style={{ alignItems: 'center' }}>
-                        <Text style={{ fontSize: 20, fontWeight: '700', color: '#111827' }}>
-                          {speciesData.reduce((s, d) => s + d.value, 0)}
-                        </Text>
-                        <Text style={{ fontSize: 10, color: '#6B7280' }}>prises</Text>
-                      </View>
-                    )}
-                  />
-                  <View style={styles.pieLegend}>
-                    {speciesData.map((item, i) => (
-                      <View key={i} style={styles.pieLegendRow}>
-                        <View style={[styles.pieDot, { backgroundColor: item.color }]} />
-                        <Text numberOfLines={1} style={styles.pieLegendLabel}>{item.label}</Text>
-                        <Text style={styles.pieLegendCount}>{item.value}</Text>
-                      </View>
-                    ))}
+              {points !== null && (
+                <View style={styles.statsMeta}>
+                  <Text style={styles.statsTitle}>{titleForPoints(points)}</Text>
+                  <View style={styles.statsLevelBadge}>
+                    <Text style={styles.statsLevelText}>Niv. {levelIndexForPoints(points)}</Text>
                   </View>
                 </View>
+              )}
+              <View style={styles.statsColumns}>
+                {statsData.map((item, index) => (
+                  <View key={item.key} style={[styles.statColumn, index < statsData.length - 1 ? styles.statColumnDivider : null]}>
+                    <Text style={styles.statLabel}>{item.label}</Text>
+                    <Text style={styles.statValue}>{item.value}</Text>
+                  </View>
+                ))}
               </View>
-            )}
+            </View>
 
             <Pressable onPress={onOpenHistory} style={({ pressed }) => [styles.card, styles.historyCard, pressed && styles.pressedCard]}>
               <View style={styles.historyHeader}>
@@ -397,10 +371,62 @@ export default function ProfileScreen() {
                 })
               )}
             </Pressable>
+
+            {/* Chart: activité mensuelle */}
+            {monthlyData.some((d) => d.value > 0) && (
+              <View style={styles.card}>
+                <Text style={styles.chartTitle}>Activité mensuelle</Text>
+                <BarChart
+                  data={monthlyData}
+                  barWidth={18}
+                  spacing={6}
+                  roundedTop
+                  hideRules
+                  xAxisThickness={0}
+                  yAxisThickness={0}
+                  noOfSections={3}
+                  labelWidth={28}
+                  xAxisLabelTextStyle={{ fontSize: 9, color: '#9CA3AF' }}
+                  height={110}
+                  maxValue={Math.max(...monthlyData.map((d) => d.value), 4)}
+                />
+              </View>
+            )}
+
+            {/* Chart: répartition espèces */}
+            {speciesData.length > 0 && (
+              <View style={styles.card}>
+                <Text style={styles.chartTitle}>Espèces pêchées</Text>
+                <View style={styles.pieRow}>
+                  <DonutChart
+                    data={speciesData}
+                    size={140}
+                    strokeWidth={10}
+                    centerLabel={
+                      <View style={{ alignItems: 'center' }}>
+                        <Text style={{ fontSize: 20, fontWeight: '700', color: '#111827' }}>
+                          {speciesData.reduce((s, d) => s + d.value, 0)}
+                        </Text>
+                        <Text style={{ fontSize: 10, color: '#6B7280' }}>prises</Text>
+                      </View>
+                    }
+                  />
+                  <View style={styles.pieLegend}>
+                    {speciesData.map((item, i) => (
+                      <View key={i} style={styles.pieLegendRow}>
+                        <View style={[styles.pieDot, { backgroundColor: item.color }]} />
+                        <Text numberOfLines={1} style={styles.pieLegendLabel}>{item.label}</Text>
+                        <Text style={styles.pieLegendCount}>{item.value}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              </View>
+            )}
           </>
         )}
       </ScrollView>
-
+      </LinearGradient>
     </ThemedSafeArea>
   );
 }
@@ -446,7 +472,7 @@ function ProfileSkeleton() {
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 16, gap: 16 },
+  container: { padding: 16, paddingBottom: 80, gap: 16 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   header: { flexDirection: 'row', alignItems: 'center', gap: 16 },
   avatar: { width: 96, height: 96, borderRadius: 48, backgroundColor: '#E5E7EB' },
@@ -472,12 +498,29 @@ const styles = StyleSheet.create({
     backgroundColor: '#F3F4F6',
   },
   statsBlock: {
-    flexDirection: 'row',
     backgroundColor: '#0D1B2A',
     borderRadius: 16,
-    paddingVertical: 12,
     overflow: 'hidden',
   },
+  statsMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#1E3A5F',
+  },
+  statsTitle: { fontSize: 15, fontWeight: '700', color: '#BFDBFE' },
+  statsLevelBadge: {
+    backgroundColor: '#1E3A5F',
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+  },
+  statsLevelText: { fontSize: 11, fontWeight: '600', color: '#93C5FD', letterSpacing: 0.5 },
+  statsColumns: { flexDirection: 'row', paddingVertical: 12 },
   statColumn: { flex: 1, alignItems: 'center', paddingVertical: 8, paddingHorizontal: 4, gap: 6 },
   statColumnDivider: { borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: '#1E3A5F' },
   statLabel: { color: '#93C5FD', fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.8 },

@@ -25,6 +25,7 @@ import { supabase } from '@/lib/supabase';
 import { awardCatchPoints } from '@/lib/gamification';
 import { normalizeName } from '@/constants/species';
 import { useSpeciesLoader } from '@/hooks/useSpeciesLoader';
+import { events } from '@/lib/events';
 
 // Liste étendue de toutes les espèces pêchables (eau douce + mer)
 // Noms alignés sur le champ `name` de la table species en BDD
@@ -124,7 +125,6 @@ const ALL_FISHABLE_SPECIES = [
   'Dorado',
   'Giant snakehead',
   'Largemouth bass',
-  'Mahi-mahi',
   'Peacock bass',
   'Perche du Nil',
   'Piranha rouge',
@@ -217,7 +217,7 @@ export default function ImportCatchesStep() {
     };
     setCatches((prev) => [...prev, entry]);
     setModalVisible(false);
-  }, [selectedSpecies, formTaille, formPoids, formAppat, formVille, isKnownSpecies]);
+  }, [selectedSpecies, formTaille, formPoids, formAppat, formVille, formPhoto, isKnownSpecies]);
 
   const removeCatch = useCallback((id: string) => {
     setCatches((prev) => prev.filter((c) => c.id !== id));
@@ -249,9 +249,14 @@ export default function ImportCatchesStep() {
     setLoading(true);
     for (const entry of catches) {
       try {
+        // Upload photo séparément : si ça échoue, la prise est quand même sauvegardée sans photo
         let photoPath: string | null = null;
         if (entry.photo) {
-          photoPath = await uploadCatchPhoto(entry.photo, session.user.id);
+          try {
+            photoPath = await uploadCatchPhoto(entry.photo, session.user.id);
+          } catch (uploadErr) {
+            console.warn('Import: photo upload failed, saving catch without photo', uploadErr);
+          }
         }
 
         const { data: newCatch, error } = await supabase
@@ -272,7 +277,10 @@ export default function ImportCatchesStep() {
           .select()
           .single();
 
-        if (!error && newCatch) {
+        if (error) {
+          console.warn('Import: catches insert error', error.message, error);
+        } else if (newCatch) {
+          events.emit('catch:added', { species: entry.species, catchId: newCatch.id });
           if (entry.isKnown) {
             await awardCatchPoints({
               session,

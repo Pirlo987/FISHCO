@@ -13,7 +13,6 @@ import {
   Animated,
   Easing,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Link, useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
@@ -34,6 +33,9 @@ export default function RegisterScreen() {
   const [email, setEmail] = React.useState('');
   const [password, setPassword] = React.useState('');
   const [loading, setLoading] = React.useState(false);
+  const [emailError, setEmailError] = React.useState('');
+  const [passwordError, setPasswordError] = React.useState('');
+  const [showPassword, setShowPassword] = React.useState(false);
   const keyboardAnim = React.useRef(new Animated.Value(0)).current;
 
   React.useEffect(() => {
@@ -101,10 +103,39 @@ export default function RegisterScreen() {
   );
 
   const onRegister = async () => {
-    if (!email || !password) {
-      Alert.alert(t('auth_required_fields'), t('login_email_required'));
-      return;
+    const emailTrimmed = email.trim();
+    let hasError = false;
+
+    if (!emailTrimmed) {
+      setEmailError(t('auth_error_email_required'));
+      hasError = true;
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrimmed)) {
+      setEmailError(t('auth_error_email_invalid'));
+      hasError = true;
+    } else {
+      setEmailError('');
     }
+
+    if (!password) {
+      setPasswordError(t('auth_error_password_required'));
+      hasError = true;
+    } else if (password.length < 8) {
+      setPasswordError(t('auth_error_password_min'));
+      hasError = true;
+    } else if (!/[A-Z]/.test(password)) {
+      setPasswordError(t('auth_error_password_uppercase'));
+      hasError = true;
+    } else if (!/[0-9]/.test(password)) {
+      setPasswordError(t('auth_error_password_number'));
+      hasError = true;
+    } else if (!/[^A-Za-z0-9]/.test(password)) {
+      setPasswordError(t('auth_error_password_special'));
+      hasError = true;
+    } else {
+      setPasswordError('');
+    }
+
+    if (hasError) return;
     setLoading(true);
     const { data, error } = await supabase.auth.signUp({ email, password });
     setLoading(false);
@@ -248,38 +279,40 @@ export default function RegisterScreen() {
                   autoCapitalize="none"
                   keyboardType="email-address"
                   value={email}
-                  onChangeText={setEmail}
-                  style={styles.input}
+                  onChangeText={(v) => { setEmail(v); if (emailError) setEmailError(''); }}
+                  style={[styles.input, !!emailError && styles.inputError]}
                   placeholderTextColor="#A0A7B1"
                   autoCorrect={false}
                   returnKeyType="next"
                   onSubmitEditing={() => passwordRef.current?.focus()}
                 />
+                {!!emailError && <Text style={styles.fieldError}>{emailError}</Text>}
 
                 <Text style={styles.label}>{t('auth_password_min')}</Text>
-                <TextInput
-                  ref={passwordRef}
-                  placeholder="********"
-                  secureTextEntry
-                  value={password}
-                  onChangeText={setPassword}
-                  style={styles.input}
-                  placeholderTextColor="#A0A7B1"
-                  returnKeyType="done"
-                />
+                <View style={[styles.inputRow, !!passwordError && styles.inputError]}>
+                  <TextInput
+                    ref={passwordRef}
+                    placeholder="********"
+                    secureTextEntry={!showPassword}
+                    value={password}
+                    onChangeText={(v) => { setPassword(v); if (passwordError) setPasswordError(''); }}
+                    style={styles.inputFlex}
+                    placeholderTextColor="#A0A7B1"
+                    returnKeyType="done"
+                  />
+                  <Pressable onPress={() => setShowPassword((v) => !v)} style={styles.eyeBtn} hitSlop={8}>
+                    <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color="#A0A7B1" />
+                  </Pressable>
+                </View>
+                {!!passwordError && <Text style={styles.fieldError}>{passwordError}</Text>}
               </View>
             </View>
 
             <View style={styles.ctaBlock}>
-              <Pressable onPress={onRegister} disabled={loading} style={styles.primaryWrapper}>
-                <LinearGradient
-                  colors={['#2563EB', '#1D4ED8']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={[styles.primaryButton, loading && { opacity: 0.88 }]}
-                >
+              <Pressable onPress={onRegister} disabled={loading} style={[styles.primaryWrapper, loading && { opacity: 0.88 }]}>
+                <View style={styles.primaryButton}>
                   <Text style={styles.primaryText}>{loading ? t('register_registering') : t('register_cta')}</Text>
-                </LinearGradient>
+                </View>
               </Pressable>
 
               <View style={styles.bottomRow}>
@@ -319,24 +352,52 @@ const styles = StyleSheet.create({
   label: { color: '#111827', fontWeight: '600', fontSize: 15, marginTop: 4 },
   input: {
     backgroundColor: '#f3f4f6',
-    borderWidth: 0,
+    borderWidth: 1.5,
+    borderColor: 'transparent',
     borderRadius: 16,
     paddingVertical: 16,
     paddingHorizontal: 16,
     color: '#0f172a',
     fontSize: 15,
   },
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f3f4f6',
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+  },
+  inputFlex: {
+    flex: 1,
+    paddingVertical: 16,
+    color: '#0f172a',
+    fontSize: 15,
+  },
+  eyeBtn: {
+    paddingLeft: 8,
+  },
+  inputError: {
+    borderColor: '#ef4444',
+    backgroundColor: '#fff5f5',
+  },
+  fieldError: {
+    color: '#ef4444',
+    fontSize: 13,
+    marginTop: -8,
+  },
   ctaBlock: { gap: 14, marginTop: 16, paddingBottom: 8 },
   primaryWrapper: {
     borderRadius: 16,
     overflow: 'hidden',
-    shadowColor: '#1E3A8A',
+    shadowColor: '#0f172a',
     shadowOpacity: 0.2,
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 10 },
     elevation: 7,
   },
-  primaryButton: { paddingVertical: 17, alignItems: 'center', borderRadius: 999 },
+  primaryButton: { paddingVertical: 17, alignItems: 'center', borderRadius: 16, backgroundColor: '#0f172a' },
   primaryText: { color: '#f8fafc', fontWeight: '800', fontSize: 16, letterSpacing: 0.2 },
   bottomRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 6 },
   bottomText: { color: '#6b7280' },

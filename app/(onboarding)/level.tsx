@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemedSafeArea } from '@/components/SafeArea';
 import { useAuth } from '@/providers/AuthProvider';
 import { mergeProfileDraft, readProfileDraft } from '@/lib/profileDraft';
@@ -34,6 +35,7 @@ const normalize = (value: string) =>
 
 export default function LevelStep() {
   const { t } = useLanguage();
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const { session } = useAuth();
   const [level, setLevel] = React.useState<LevelValue | null>(null);
@@ -83,7 +85,7 @@ export default function LevelStep() {
   };
 
   return (
-    <ThemedSafeArea edges={['top', 'bottom']} style={{ backgroundColor: '#ffffff' }}>
+    <ThemedSafeArea edges={['top']} style={{ backgroundColor: '#ffffff' }}>
       <KeyboardAvoidingView 
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
         style={{ flex: 1 }}
@@ -165,7 +167,7 @@ export default function LevelStep() {
             </View>
           </ScrollView>
 
-          <View style={styles.footer}>
+          <View style={[styles.footer, { paddingBottom: insets.bottom + 50 }]}>
             <View style={styles.buttonRow}>
               <Pressable
                 style={styles.secondaryWrapper}
@@ -182,21 +184,11 @@ export default function LevelStep() {
                 onPress={onSave}
                 disabled={submitting}
               >
-                <LinearGradient
-                  colors={['#1E3A5F', '#0F2744']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.primaryButton}
-                >
+                <View style={styles.primaryButton}>
                   <Text style={styles.primaryText}>
                     {submitting ? t('onboard_loading') : t('onboard_continue')}
                   </Text>
-                  {!submitting && (
-                    <View style={styles.arrowWrapper}>
-                      <Text style={styles.arrowIcon}>→</Text>
-                    </View>
-                  )}
-                </LinearGradient>
+                </View>
               </Pressable>
             </View>
           </View>
@@ -323,11 +315,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
   },
-  footer: { 
+  footer: {
     paddingHorizontal: 24,
     paddingTop: 12,
-    paddingBottom: 28,
     backgroundColor: '#ffffff',
+    zIndex: 10,
   },
   buttonRow: {
     flexDirection: 'row',
@@ -353,38 +345,21 @@ const styles = StyleSheet.create({
   },
   primaryWrapper: {
     flex: 1,
-    borderRadius: 16,
-    overflow: 'hidden',
-    shadowColor: '#1E3A5F',
-    shadowOpacity: 0.25,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 8,
   },
-  primaryButton: { 
+  primaryButton: {
     paddingVertical: 18,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
+    backgroundColor: '#0f172a',
+    borderRadius: 16,
+    overflow: 'hidden',
   },
   primaryText: { 
     color: '#ffffff', 
     fontWeight: '800', 
     fontSize: 17,
     letterSpacing: 0.3,
-  },
-  arrowWrapper: {
-    width: 28,
-    height: 28,
-    borderRadius: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  arrowIcon: {
-    color: '#ffffff',
-    fontSize: 18,
-    fontWeight: '700',
   },
 });
