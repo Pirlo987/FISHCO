@@ -232,6 +232,7 @@ const translations = {
     profile_catch: 'Prise',
 
     // ---------- History ----------
+    history_title: 'Historique',
     history_no_catches: 'Aucune prise pour le moment.',
     history_add_first: 'Ajoute ta première depuis l\'onglet "Ajouter".',
     history_location: 'Lieu : ',
@@ -531,6 +532,7 @@ const translations = {
     profile_catch: 'Catch',
 
     // ---------- History ----------
+    history_title: 'History',
     history_no_catches: 'No catches yet.',
     history_add_first: 'Add your first from the "Add" tab.',
     history_location: 'Location: ',

@@ -8,10 +8,11 @@ import {
   Text,
   View,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usePulse } from '@/hooks/usePulse';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
-import { ThemedSafeArea } from '@/components/SafeArea';
 import { C } from '@/constants/communityPalette';
 import { useCommunityFeed } from '@/hooks/useCommunityFeed';
 import { CatchCard } from '@/components/community/CatchCard';
@@ -23,6 +24,7 @@ import { useRouter } from 'expo-router';
 export default function CommunityScreen() {
   const { t } = useLanguage();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const {
     feed,
     loading,
@@ -128,22 +130,46 @@ export default function CommunityScreen() {
 
   const keyExtractor = React.useCallback((item: FeedItem) => item.id, []);
 
+  const publishBanner = (
+    <Pressable
+      style={({ pressed }) => [styles.publishCard, { opacity: pressed ? 0.88 : 1 }]}
+      onPress={() => router.push('/(tabs)/add-catch')}
+    >
+      <LinearGradient
+        colors={['#1E3A5F', '#2563EB']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.publishGradient}
+      >
+        <View style={styles.publishLeft}>
+          <View style={styles.publishIconWrap}>
+            <Ionicons name="camera" size={22} color="#FFFFFF" />
+          </View>
+          <View style={styles.publishTexts}>
+            <Text style={styles.publishTitle}>Partage ta prise</Text>
+            <Text style={styles.publishSub}>Ajoute une photo et inspire la communauté</Text>
+          </View>
+        </View>
+        <View style={styles.publishArrow}>
+          <Ionicons name="arrow-forward" size={18} color="rgba(255,255,255,0.8)" />
+        </View>
+      </LinearGradient>
+    </Pressable>
+  );
+
   return (
-    <ThemedSafeArea edges={['top']} style={styles.safeArea}>
+    <LinearGradient
+      colors={['#DBEAFE', '#EFF6FF', '#F5F8FC']}
+      start={{ x: 0.5, y: 0 }}
+      end={{ x: 0.5, y: 0.35 }}
+      style={[styles.root, { paddingTop: insets.top }]}
+    >
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Communaute</Text>
-        <View style={styles.headerIcons}>
-          <Pressable style={styles.headerBtn} hitSlop={8}>
-            <Ionicons name="add-circle-outline" size={24} color={C.text} />
-          </Pressable>
-          <Pressable style={styles.headerBtn} hitSlop={8}>
-            <View>
-              <Ionicons name="notifications-outline" size={22} color={C.text} />
-              <View style={styles.notifDot} />
-            </View>
-          </Pressable>
-        </View>
+        <Text style={styles.headerTitle}>Fishbook</Text>
+        <Pressable style={styles.headerBtn} hitSlop={8} onPress={() => router.push('/(tabs)/add-catch')}>
+          <Ionicons name="add-circle-outline" size={24} color="#2563EB" />
+        </Pressable>
       </View>
 
       {/* Error */}
@@ -166,12 +192,13 @@ export default function CommunityScreen() {
           keyExtractor={keyExtractor}
           renderItem={renderItem}
           contentContainerStyle={[styles.list, feed.length === 0 && styles.emptyContainer]}
+          ListHeaderComponent={publishBanner}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              tintColor={C.accent}
-              colors={[C.accent]}
+              tintColor="#2563EB"
+              colors={['#2563EB']}
             />
           }
           showsVerticalScrollIndicator={false}
@@ -182,9 +209,9 @@ export default function CommunityScreen() {
               </View>
               <Text style={styles.emptyTitle}>{t('community_no_posts')}</Text>
               <Text style={styles.emptySubtitle}>
-                Sois le premier a partager ta prise avec la communaute !
+                Sois le premier à partager ta prise avec la communauté !
               </Text>
-              <Pressable style={styles.emptyBtn}>
+              <Pressable style={styles.emptyBtn} onPress={() => router.push('/(tabs)/add-catch')}>
                 <Ionicons name="camera-outline" size={18} color="#FFFFFF" />
                 <Text style={styles.emptyBtnText}>Ajouter une prise</Text>
               </Pressable>
@@ -201,7 +228,7 @@ export default function CommunityScreen() {
         onBlockUser={handleBlockUser}
         onClose={handleCloseMenu}
       />
-    </ThemedSafeArea>
+    </LinearGradient>
   );
 }
 
@@ -239,31 +266,80 @@ function CommunitySkeleton() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: C.bg },
+  root: { flex: 1 },
 
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: C.surface,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: C.border,
+    paddingVertical: 14,
   },
-  headerTitle: { fontSize: 28, fontWeight: '800', color: C.text, letterSpacing: -0.8 },
-  headerIcons: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  headerBtn: { padding: 4 },
-  notifDot: {
-    position: 'absolute',
-    top: -1,
-    right: -1,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: C.like,
-    borderWidth: 1.5,
-    borderColor: C.surface,
+  headerTitle: { fontSize: 28, fontWeight: '800', color: '#0F172A', letterSpacing: -0.8 },
+  headerBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+
+  // ── Publish banner ──
+  publishCard: {
+    marginBottom: 16,
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: '#1E3A5F',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  publishGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 18,
+  },
+  publishLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    flex: 1,
+  },
+  publishIconWrap: {
+    width: 46,
+    height: 46,
+    borderRadius: 13,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  publishTexts: { flex: 1 },
+  publishTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: -0.2,
+  },
+  publishSub: {
+    fontSize: 13,
+    fontWeight: '400',
+    color: 'rgba(255,255,255,0.72)',
+    marginTop: 2,
+  },
+  publishArrow: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
   list: { padding: 16, gap: 16 },

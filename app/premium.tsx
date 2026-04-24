@@ -21,6 +21,7 @@ import {
   PRODUCT_ANNUAL,
   PRODUCT_LIFETIME,
 } from '@/lib/purchases';
+import { trackEvent } from '@/lib/analytics';
 
 type Plan = 'monthly' | 'annual' | 'lifetime';
 
@@ -90,6 +91,10 @@ export default function PremiumScreen() {
   const [restoring, setRestoring] = React.useState(false);
 
   React.useEffect(() => {
+    trackEvent('premium_screen_viewed');
+  }, []);
+
+  React.useEffect(() => {
     getOfferings().then((offering) => {
       if (offering) {
         const monthly =
@@ -136,6 +141,7 @@ export default function PremiumScreen() {
     try {
       setPurchasing(true);
       await purchasePackage(selectedPackage);
+      trackEvent('premium_purchased', { plan: selectedPlan, product_id: selectedPackage.product.identifier });
       router.back();
     } catch (e: any) {
       if (!e?.userCancelled) {

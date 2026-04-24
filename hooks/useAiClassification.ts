@@ -3,6 +3,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { decode } from 'base64-arraybuffer';
 import { supabase } from '@/lib/supabase';
+import { trackEvent } from '@/lib/analytics';
 
 const SPECIES_AI_FUNCTION = process.env.EXPO_PUBLIC_SPECIES_AI_FUNCTION ?? 'detect-species';
 const AI_FALLBACK_MESSAGE =
@@ -109,6 +110,13 @@ export function useAiClassification() {
           if (!name) return false;
           const lower = name.toLowerCase();
           return lower !== 'unknown' && lower !== 'unk' && lower !== 'inconnu';
+        });
+
+        trackEvent('ai_detection_used', {
+          success: cleaned.length > 0,
+          suggestions_count: cleaned.length,
+          top_species: cleaned[0]?.species ?? null,
+          top_confidence: cleaned[0]?.confidence ?? null,
         });
 
         if (!cleaned.length) {

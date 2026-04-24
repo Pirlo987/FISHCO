@@ -18,6 +18,7 @@ import { ThemedSafeArea } from '@/components/SafeArea';
 import { useLanguage } from '@/providers/LanguageProvider';
 import { Ionicons } from '@expo/vector-icons';
 import { usePremium, FREE_HISTORY_LIMIT } from '@/hooks/usePremium';
+import { saveCache, loadCache } from '@/lib/catchesCache';
 
 type Catch = {
   id: string;
@@ -30,8 +31,11 @@ type Catch = {
   region?: string | null;
 };
 
-// Row height must match styles.row total height for getItemLayout to work
-const ROW_HEIGHT = 96; // padding 16*2 + image 64
+type ListItem =
+  | { type: 'header'; key: string; label: string }
+  | { type: 'catch'; key: string; data: Catch };
+
+const ROW_HEIGHT = 96;
 
 const urlFromPhotoPath = (path?: string | null) => {
   if (!path) return null;
@@ -71,29 +75,58 @@ const CatchRow = React.memo(function CatchRow({ item, onPress }: RowProps) {
   );
 });
 
+const MonthHeader = React.memo(function MonthHeader({ label }: { label: string }) {
+  return (
+    <View style={styles.monthHeader}>
+      <Text style={styles.monthLabel}>{label}</Text>
+    </View>
+  );
+});
+
 export default function HistoryScreen() {
-  const { t } = useLanguage();
+  const { t, locale } = useLanguage();
   const router = useRouter();
   const { session } = useAuth();
   const { isPremium, isLoading: isPremiumLoading } = usePremium();
   const [data, setData] = React.useState<Catch[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [refreshing, setRefreshing] = React.useState(false);
+  const [isOffline, setIsOffline] = React.useState(false);
 
   const fetchData = React.useCallback(async () => {
-    if (!session) return;
-    const query = supabase
-      .from('catches')
-      .select('id,species,weight_kg,length_cm,notes,caught_at,photo_path,region')
-      .eq('user_id', session.user.id)
-      .order('caught_at', { ascending: false });
+    const uid = session?.user?.id;
+    if (!uid) return;
 
-    const { data: rows, error } = (isPremium || isPremiumLoading)
-      ? await query
-      : await query.limit(FREE_HISTORY_LIMIT);
+    const cacheScope = `history_${isPremium ? 'premium' : 'free'}`;
+    const cached = await loadCache<Catch[]>(uid, cacheScope);
+    if (cached && cached.length > 0) {
+      setData(cached);
+      setLoading(false);
+    }
 
-    if (!error && rows) setData(rows as unknown as Catch[]);
-    setLoading(false);
+    try {
+      const query = supabase
+        .from('catches')
+        .select('id,species,weight_kg,length_cm,notes,caught_at,photo_path,region')
+        .eq('user_id', uid)
+        .order('caught_at', { ascending: false });
+
+      const { data: rows, error } = (isPremium || isPremiumLoading)
+        ? await query
+        : await query.limit(FREE_HISTORY_LIMIT);
+
+      if (!error && rows) {
+        const fresh = rows as unknown as Catch[];
+        setData(fresh);
+        setIsOffline(false);
+        await saveCache(uid, cacheScope, fresh);
+      }
+    } catch {
+      if (!cached) setData([]);
+      setIsOffline(true);
+    } finally {
+      setLoading(false);
+    }
   }, [session, isPremium, isPremiumLoading]);
 
   React.useEffect(() => {
@@ -111,21 +144,51 @@ export default function HistoryScreen() {
     [router],
   );
 
-  const keyExtractor = React.useCallback((item: Catch) => item.id, []);
+  // Build a flat list with month header items injected between groups
+  const groupedData = React.useMemo<ListItem[]>(() => {
+    const dateLocale = locale === 'fr' ? 'fr-FR' : 'en-US';
+    const items: ListItem[] = [];
+    let currentMonthKey = '';
+
+    for (const c of data) {
+      const date = new Date(c.caught_at);
+      const monthKey = `${date.getFullYear()}-${date.getMonth()}`;
+
+      if (monthKey !== currentMonthKey) {
+        currentMonthKey = monthKey;
+        const label = date.toLocaleDateString(dateLocale, { month: 'long', year: 'numeric' });
+        const capitalized = label.charAt(0).toUpperCase() + label.slice(1);
+        items.push({ type: 'header', key: `header-${monthKey}`, label: capitalized });
+      }
+
+      items.push({ type: 'catch', key: c.id, data: c });
+    }
+
+    return items;
+  }, [data, locale]);
+
+  const keyExtractor = React.useCallback((item: ListItem) => item.key, []);
 
   const renderItem = React.useCallback(
-    ({ item }: { item: Catch }) => <CatchRow item={item} onPress={handlePress} />,
+    ({ item }: { item: ListItem }) => {
+      if (item.type === 'header') {
+        return <MonthHeader label={item.label} />;
+      }
+      return <CatchRow item={item.data} onPress={handlePress} />;
+    },
     [handlePress],
-  );
-
-  const getItemLayout = React.useCallback(
-    (_: any, index: number) => ({ length: ROW_HEIGHT, offset: ROW_HEIGHT * index, index }),
-    [],
   );
 
   if (loading) {
     return (
       <ThemedSafeArea>
+        <View style={styles.header}>
+          <Pressable onPress={() => router.back()} hitSlop={10} style={styles.backBtn}>
+            <Ionicons name="chevron-back" size={24} color="#111827" />
+          </Pressable>
+          <Text style={styles.headerTitle}>{t('history_title')}</Text>
+          <View style={{ width: 40 }} />
+        </View>
         <HistorySkeleton />
       </ThemedSafeArea>
     );
@@ -133,12 +196,24 @@ export default function HistoryScreen() {
 
   return (
     <ThemedSafeArea>
+      <View style={styles.header}>
+        <Pressable onPress={() => router.back()} hitSlop={10} style={styles.backBtn}>
+          <Ionicons name="chevron-back" size={24} color="#111827" />
+        </Pressable>
+        <Text style={styles.headerTitle}>{t('history_title')}</Text>
+        <View style={{ width: 40 }} />
+      </View>
+      {isOffline && (
+        <View style={styles.offlineBanner}>
+          <Ionicons name="cloud-offline-outline" size={15} color="#92400E" />
+          <Text style={styles.offlineBannerText}>Mode hors ligne — données mises en cache</Text>
+        </View>
+      )}
       <FlatList
         contentContainerStyle={data.length === 0 ? styles.flexGrow : undefined}
-        data={data}
+        data={groupedData}
         keyExtractor={keyExtractor}
         renderItem={renderItem}
-        getItemLayout={getItemLayout}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         showsVerticalScrollIndicator={false}
         removeClippedSubviews
@@ -205,6 +280,31 @@ const skeletonStyles = StyleSheet.create({
 });
 
 const styles = StyleSheet.create({
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  backBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff',
+  },
+  headerTitle: { fontSize: 18, fontWeight: '700', color: '#111827', flex: 1, textAlign: 'center' },
+  monthHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingTop: 20,
+    paddingBottom: 6,
+  },
+  monthLabel: { fontSize: 12, fontWeight: '500', color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: 0.8 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 16 },
   flexGrow: { flexGrow: 1 },
   row: {
@@ -239,4 +339,19 @@ const styles = StyleSheet.create({
   limitBannerText: { flex: 1, gap: 3 },
   limitBannerTitle: { fontSize: 13, fontWeight: '700', color: '#92400E' },
   limitBannerSub: { fontSize: 12, color: '#B45309' },
+  offlineBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#FFFBEB',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginHorizontal: 16,
+    marginBottom: 8,
+    marginTop: 4,
+  },
+  offlineBannerText: { fontSize: 12, fontWeight: '500', color: '#92400E', flex: 1 },
 });

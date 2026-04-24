@@ -1,9 +1,9 @@
 import React from 'react';
 import { Alert, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { P } from '@/constants/addCatchPalette';
 import { ThemedText } from '@/components/ThemedText';
-import { FormCard } from './FormCard';
 import { useLanguage } from '@/providers/LanguageProvider';
 
 type Props = {
@@ -26,6 +26,7 @@ export const StepPublish = React.memo(function StepPublish({
   onChangeDescription,
 }: Props) {
   const { t } = useLanguage();
+
   const handlePublic = React.useCallback(() => {
     if (!isKnownSpecies) {
       Alert.alert(t('step_publish_unknown_species'), t('step_publish_disabled_msg'));
@@ -39,141 +40,282 @@ export const StepPublish = React.memo(function StepPublish({
     onChangeVisibility('private');
   }, [onChangeVisibility]);
 
+  const isPublic = visibility === 'public';
+  const isPrivate = visibility === 'private';
+
   return (
     <View style={styles.container}>
-      <FormCard label={t('step_publish_visibility')}>
+
+      {/* ── Visibilité ────────────────────────────────────────────────────── */}
+      <View style={styles.section}>
+        <ThemedText style={styles.sectionLabel}>{t('step_publish_visibility')}</ThemedText>
+
         <View style={styles.visibilityRow}>
+          {/* Public */}
           <Pressable
             onPress={handlePublic}
             style={({ pressed }) => [
-              styles.visibilityCard,
-              visibility === 'public' && styles.visibilityCardActive,
-              !isKnownSpecies && styles.visibilityCardDisabled,
-              { opacity: pressed ? 0.8 : 1 },
+              styles.visCard,
+              isPublic && styles.visCardActive,
+              !isKnownSpecies && styles.visCardDisabled,
+              pressed && { opacity: 0.85 },
             ]}
           >
-            <Ionicons
-              name="earth-outline"
-              size={20}
-              color={visibility === 'public' ? P.blue : P.slate}
-            />
-            <ThemedText
-              style={[styles.visibilityText, visibility === 'public' && styles.visibilityTextActive]}
-            >
-              {t('step_publish_public')}
-            </ThemedText>
+            {isPublic ? (
+              <LinearGradient
+                colors={[P.blueLight, P.borderBlue]}
+                style={styles.visIconGradient}
+              >
+                <Ionicons name="earth" size={18} color={P.blue} />
+              </LinearGradient>
+            ) : (
+              <View style={styles.visIconPlain}>
+                <Ionicons name="earth-outline" size={18} color={P.slateLight} />
+              </View>
+            )}
+            <View style={styles.visInfo}>
+              <ThemedText style={[styles.visTitle, isPublic && styles.visTitleActive]}>
+                {t('step_publish_public')}
+              </ThemedText>
+              <ThemedText style={styles.visSub}>Visible par tous</ThemedText>
+            </View>
+            <View style={[styles.radio, isPublic && styles.radioActive]}>
+              {isPublic && <View style={styles.radioDot} />}
+            </View>
           </Pressable>
+
+          {/* Privée */}
           <Pressable
             onPress={handlePrivate}
             style={({ pressed }) => [
-              styles.visibilityCard,
-              visibility === 'private' && styles.visibilityCardActive,
-              { opacity: pressed ? 0.8 : 1 },
+              styles.visCard,
+              isPrivate && styles.visCardActivePrivate,
+              pressed && { opacity: 0.85 },
             ]}
           >
-            <Ionicons
-              name="lock-closed-outline"
-              size={20}
-              color={visibility === 'private' ? P.blue : P.slate}
-            />
-            <ThemedText
-              style={[styles.visibilityText, visibility === 'private' && styles.visibilityTextActive]}
-            >
-              {t('step_publish_private')}
-            </ThemedText>
+            {isPrivate ? (
+              <LinearGradient
+                colors={['#475569', '#1E293B']}
+                style={styles.visIconGradient}
+              >
+                <Ionicons name="lock-closed" size={16} color={P.white} />
+              </LinearGradient>
+            ) : (
+              <View style={styles.visIconPlain}>
+                <Ionicons name="lock-closed-outline" size={16} color={P.slateLight} />
+              </View>
+            )}
+            <View style={styles.visInfo}>
+              <ThemedText style={[styles.visTitle, isPrivate && styles.visTitlePrivate]}>
+                {t('step_publish_private')}
+              </ThemedText>
+              <ThemedText style={styles.visSub}>Seulement toi</ThemedText>
+            </View>
+            <View style={[styles.radio, isPrivate && styles.radioActivePrivate]}>
+              {isPrivate && <View style={styles.radioDotPrivate} />}
+            </View>
           </Pressable>
         </View>
+
+        {/* Avertissement espèce inconnue */}
         {!isKnownSpecies && (
-          <View style={styles.warningBanner}>
-            <Ionicons name="alert-circle-outline" size={16} color="#B45309" />
+          <View style={styles.warningCard}>
+            <Ionicons name="alert-circle-outline" size={16} color="#D97706" />
             <ThemedText style={styles.warningText}>
               {t('step_publish_private_msg')}
             </ThemedText>
           </View>
         )}
-      </FormCard>
+      </View>
 
-      <FormCard label={t('step_publish_title_label')}>
-        <View style={styles.inputWrapper}>
-          <Ionicons name="text-outline" size={18} color={P.slate} style={styles.inputIcon} />
+      {/* ── Titre ─────────────────────────────────────────────────────────── */}
+      <View style={styles.section}>
+        <ThemedText style={styles.sectionLabel}>{t('step_publish_title_label')}</ThemedText>
+        <View style={[styles.inputRow, title && styles.inputRowActive]}>
           <TextInput
-            style={styles.inputField}
-            placeholder={t('step_details_optional')}
+            style={styles.inputText}
+            placeholder={t('step_publish_title_label')}
             placeholderTextColor={P.slateLight}
             value={title}
             onChangeText={onChangeTitle}
           />
+          {title && (
+            <View style={styles.inputCheck}>
+              <Ionicons name="checkmark" size={12} color={P.white} />
+            </View>
+          )}
         </View>
-      </FormCard>
+      </View>
 
-      <FormCard label={t('step_publish_desc_label')}>
+      {/* ── Description ───────────────────────────────────────────────────── */}
+      <View style={styles.section}>
+        <View style={styles.labelRow}>
+          <ThemedText style={styles.sectionLabel}>{t('step_publish_desc_label')}</ThemedText>
+          <ThemedText style={styles.optionalTag}>Optionnel</ThemedText>
+        </View>
         <TextInput
-          style={styles.textareaField}
+          style={[styles.textarea, description && styles.textareaActive]}
           placeholder={t('step_publish_tell')}
           placeholderTextColor={P.slateLight}
           multiline
           value={description}
           onChangeText={onChangeDescription}
         />
-      </FormCard>
+      </View>
+
     </View>
   );
 });
 
 const styles = StyleSheet.create({
-  container: { gap: 16 },
+  container: { gap: 20 },
 
-  visibilityRow: { flexDirection: 'row', gap: 10 },
-  visibilityCard: {
-    flex: 1,
+  section: { gap: 8 },
+  sectionLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: P.blueDark,
+    letterSpacing: 0.1,
+  },
+  labelRow: {
     flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  optionalTag: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: P.slateLight,
+  },
+
+  // ── Visibilité ────────────────────────────────────────────────────────
+  visibilityRow: { gap: 8 },
+  visCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: P.white,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: P.border,
+    padding: 14,
+  },
+  visCardActive: {
+    borderColor: P.borderBlue,
+    backgroundColor: P.blueGhost,
+  },
+  visCardActivePrivate: {
+    borderColor: '#CBD5E1',
+    backgroundColor: '#F8FAFC',
+  },
+  visCardDisabled: { opacity: 0.4 },
+
+  visIconGradient: {
+    width: 38,
+    height: 38,
+    borderRadius: 11,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 14,
-    borderRadius: 12,
+    flexShrink: 0,
+  },
+  visIconPlain: {
+    width: 38,
+    height: 38,
+    borderRadius: 11,
+    backgroundColor: P.surface,
     borderWidth: 1,
     borderColor: P.border,
-    backgroundColor: P.white,
-  },
-  visibilityCardActive: { borderColor: P.borderBlue, backgroundColor: P.blueGhost },
-  visibilityCardDisabled: { opacity: 0.4 },
-  visibilityText: { fontSize: 14, fontWeight: '600', color: P.slate },
-  visibilityTextActive: { color: P.blue },
-
-  warningBanner: {
-    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  visInfo: { flex: 1, gap: 2 },
+  visTitle: { fontSize: 15, fontWeight: '700', color: P.slate },
+  visTitleActive: { color: P.blue },
+  visTitlePrivate: { color: '#334155' },
+  visSub: { fontSize: 12, fontWeight: '400', color: P.slateLight },
+
+  radio: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: P.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  radioActive: { borderColor: P.blue },
+  radioActivePrivate: { borderColor: '#64748B' },
+  radioDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: P.blue,
+  },
+  radioDotPrivate: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#64748B',
+  },
+
+  warningCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
     gap: 8,
     backgroundColor: '#FFFBEB',
-    borderRadius: 10,
-    padding: 12,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: '#FDE68A',
+    padding: 12,
   },
-  warningText: { flex: 1, fontSize: 12, fontWeight: '500', color: '#92400E' },
+  warningText: { flex: 1, fontSize: 12, fontWeight: '500', color: '#92400E', lineHeight: 17 },
 
-  inputWrapper: {
+  // ── Champs texte ──────────────────────────────────────────────────────
+  inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: P.white,
-    borderRadius: 12,
-    borderWidth: 1,
+    borderRadius: 14,
+    borderWidth: 1.5,
     borderColor: P.border,
     paddingHorizontal: 14,
+    paddingVertical: 2,
+    gap: 8,
   },
-  inputIcon: { marginRight: 10 },
-  inputField: { flex: 1, paddingVertical: 14, fontSize: 15, color: P.blueDeep },
+  inputRowActive: {
+    borderColor: P.borderBlue,
+    backgroundColor: P.blueGhost,
+  },
+  inputText: {
+    flex: 1,
+    paddingVertical: 14,
+    fontSize: 15,
+    color: P.blueDeep,
+  },
+  inputCheck: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: P.blue,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 
-  textareaField: {
+  textarea: {
     backgroundColor: P.white,
-    borderRadius: 12,
-    borderWidth: 1,
+    borderRadius: 14,
+    borderWidth: 1.5,
     borderColor: P.border,
     padding: 14,
     fontSize: 15,
     color: P.blueDeep,
     height: 110,
     textAlignVertical: 'top',
+  },
+  textareaActive: {
+    borderColor: P.borderBlue,
+    backgroundColor: P.blueGhost,
   },
 });

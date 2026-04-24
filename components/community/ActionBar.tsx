@@ -75,7 +75,6 @@ export const ActionBar = React.memo(function ActionBar({
           <ActionButton icon="chatbubble-outline" onPress={onToggleComments} />
           {commentCount > 0 && <Text style={styles.count}>{commentCount}</Text>}
         </View>
-        <ActionButton icon="paper-plane-outline" />
       </View>
       <ActionButton
         icon="bookmark-outline"

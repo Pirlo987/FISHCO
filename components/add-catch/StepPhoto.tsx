@@ -61,25 +61,25 @@ export const StepPhoto = React.memo(function StepPhoto({
         <ThemedText style={styles.emptySub}>{t('step_photo_hint')}</ThemedText>
         <View style={styles.buttons}>
           <Pressable
-            onPress={onTakePhoto}
-            style={({ pressed }) => [styles.cameraWrapper, { opacity: pressed ? 0.9 : 1 }]}
+            onPress={onPickImage}
+            style={({ pressed }) => [styles.galleryWrapper, { opacity: pressed ? 0.9 : 1 }]}
           >
             <LinearGradient
               colors={[P.blueDark, '#0F2744']}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
-              style={styles.cameraBtn}
+              style={styles.galleryGradientBtn}
             >
-              <Ionicons name="camera" size={20} color={P.white} />
-              <ThemedText style={styles.cameraBtnText}>{t('step_photo_camera')}</ThemedText>
+              <Ionicons name="images" size={20} color={P.white} />
+              <ThemedText style={styles.galleryGradientText}>{t('step_photo_gallery')}</ThemedText>
             </LinearGradient>
           </Pressable>
           <Pressable
-            onPress={onPickImage}
-            style={({ pressed }) => [styles.galleryBtn, { opacity: pressed ? 0.7 : 1 }]}
+            onPress={onTakePhoto}
+            style={({ pressed }) => [styles.cameraBtn, { opacity: pressed ? 0.7 : 1 }]}
           >
-            <Ionicons name="images-outline" size={18} color={P.blueDark} />
-            <ThemedText style={styles.galleryBtnText}>{t('step_photo_gallery')}</ThemedText>
+            <Ionicons name="camera-outline" size={18} color={P.blueDark} />
+            <ThemedText style={styles.cameraBtnText}>{t('step_photo_camera')}</ThemedText>
           </Pressable>
         </View>
       </View>
@@ -157,7 +157,7 @@ const styles = StyleSheet.create({
   emptyTitle: { fontSize: 18, fontWeight: '700', color: P.blueDeep },
   emptySub: { fontSize: 13, fontWeight: '400', color: P.slate, marginBottom: 16 },
   buttons: { flexDirection: 'column', gap: 12, width: '100%' },
-  cameraWrapper: {
+  galleryWrapper: {
     borderRadius: 14,
     overflow: 'hidden',
     shadowColor: P.blueDark,
@@ -167,7 +167,7 @@ const styles = StyleSheet.create({
     elevation: 5,
     width: '100%',
   },
-  cameraBtn: {
+  galleryGradientBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -175,8 +175,8 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 14,
   },
-  cameraBtnText: { fontSize: 15, fontWeight: '800', color: P.white, letterSpacing: 0.2 },
-  galleryBtn: {
+  galleryGradientText: { fontSize: 15, fontWeight: '800', color: P.white, letterSpacing: 0.2 },
+  cameraBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -188,5 +188,5 @@ const styles = StyleSheet.create({
     borderColor: P.border,
     width: '100%',
   },
-  galleryBtnText: { fontSize: 14, fontWeight: '600', color: P.blueDark },
+  cameraBtnText: { fontSize: 14, fontWeight: '600', color: P.blueDark },
 });

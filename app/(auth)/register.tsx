@@ -22,7 +22,7 @@ import * as Crypto from 'expo-crypto';
 import { ThemedSafeArea } from '@/components/SafeArea';
 import { supabase } from '@/lib/supabase';
 import { useGoogleAuth } from '@/hooks/useGoogleAuth';
-import { useFacebookAuth } from '@/hooks/useFacebookAuth';
+
 import { useLanguage } from '@/providers/LanguageProvider';
 
 export default function RegisterScreen() {
@@ -154,7 +154,6 @@ export default function RegisterScreen() {
   };
 
   const { signInWithGoogle } = useGoogleAuth({ onSuccess: completeAfterAuth });
-  const { signInWithFacebook } = useFacebookAuth({ onSuccess: completeAfterAuth });
 
   const onGoogle = async () => {
     setLoading(true);
@@ -165,20 +164,6 @@ export default function RegisterScreen() {
         return;
       }
       Alert.alert(t('register_google_failed'), err?.message || t('auth_retry'));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const onFacebook = async () => {
-    setLoading(true);
-    try {
-      await signInWithFacebook();
-    } catch (err: any) {
-      if (err?.message?.includes('annulee')) {
-        return;
-      }
-      Alert.alert(t('register_facebook_failed'), err?.message || t('auth_retry'));
     } finally {
       setLoading(false);
     }
@@ -254,15 +239,6 @@ export default function RegisterScreen() {
                   >
                     <Ionicons name="logo-google" size={22} color="#DB4437" />
                   </Pressable>
-                  <Pressable
-                    disabled={loading}
-                    onPress={onFacebook}
-                    style={({ pressed }) => [styles.socialBtn, pressed && { opacity: 0.85 }]}
-                    accessibilityRole="button"
-                    accessibilityLabel={t('auth_with_facebook')}
-                  >
-                    <Ionicons name="logo-facebook" size={22} color="#1877F2" />
-                  </Pressable>
                 </View>
                 <View style={styles.dividerRow}>
                   <View style={styles.divider} />
@@ -321,6 +297,13 @@ export default function RegisterScreen() {
                   {t('register_login_link')}
                 </Link>
               </View>
+
+              <Text style={styles.legalText}>
+                En créant un compte, tu acceptes nos{' '}
+                <Link href="/terms" style={styles.legalLink}>Conditions d'utilisation</Link>
+                {' '}et notre{' '}
+                <Link href="/privacy-policy" style={styles.legalLink}>Politique de confidentialité</Link>.
+              </Text>
             </View>
           </Animated.View>
         </TouchableWithoutFeedback>
@@ -402,4 +385,6 @@ const styles = StyleSheet.create({
   bottomRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 6 },
   bottomText: { color: '#6b7280' },
   link: { color: '#0f2c3f', fontWeight: '700' },
+  legalText: { textAlign: 'center', fontSize: 11, color: '#9ca3af', marginTop: 12, lineHeight: 16 },
+  legalLink: { color: '#6b7280', textDecorationLine: 'underline' },
 });

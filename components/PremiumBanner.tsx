@@ -1,6 +1,6 @@
 import React from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { ThemedText } from '@/components/ThemedText';
 
@@ -14,14 +14,16 @@ export function PremiumBanner({ onPress }: Props) {
       onPress={onPress}
       style={({ pressed }) => [styles.wrapper, { opacity: pressed ? 0.92 : 1 }]}
     >
-      <LinearGradient
-        colors={['#0f172a', '#1e3a5f', '#2563eb']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.gradient}
-      >
+      <Image
+        source={require('@/assets/images/fond_bleu_premium.png')}
+        style={StyleSheet.absoluteFill}
+        contentFit="cover"
+        cachePolicy="memory"
+      />
+      <View style={[StyleSheet.absoluteFill, styles.overlay]} />
+      <View style={styles.content}>
         <View style={styles.iconWrap}>
-          <Ionicons name="star" size={22} color="#93C5FD" />
+          <Ionicons name="star" size={22} color="#FFFFFF" />
         </View>
 
         <View style={styles.textBlock}>
@@ -34,9 +36,9 @@ export function PremiumBanner({ onPress }: Props) {
         <View style={styles.priceBlock}>
           <ThemedText style={styles.price}>2,99 €</ThemedText>
           <ThemedText style={styles.pricePer}>/mois</ThemedText>
-          <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.6)" style={styles.chevron} />
+          <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.7)" style={styles.chevron} />
         </View>
-      </LinearGradient>
+      </View>
     </Pressable>
   );
 }
@@ -46,24 +48,27 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     overflow: 'hidden',
     marginBottom: 28,
-    shadowColor: '#1e3a5f',
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
+    shadowColor: '#4A9FD4',
+    shadowOpacity: 0.3,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 5 },
     elevation: 5,
   },
-  gradient: {
+  content: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 16,
     paddingHorizontal: 18,
     gap: 12,
   },
+  overlay: {
+    backgroundColor: 'rgba(5, 20, 50, 0.12)',
+  },
   iconWrap: {
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: 'rgba(255,255,255,0.25)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -80,7 +85,7 @@ const styles = StyleSheet.create({
   sub: {
     fontSize: 12,
     fontWeight: '500',
-    color: 'rgba(255,255,255,0.7)',
+    color: '#0D3660',
   },
   priceBlock: {
     flexDirection: 'row',
@@ -95,7 +100,7 @@ const styles = StyleSheet.create({
   pricePer: {
     fontSize: 12,
     fontWeight: '500',
-    color: 'rgba(255,255,255,0.7)',
+    color: 'rgba(255,255,255,0.75)',
   },
   chevron: {
     marginLeft: 4,

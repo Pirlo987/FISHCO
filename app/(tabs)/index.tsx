@@ -30,6 +30,7 @@ import { supabase } from '@/lib/supabase';
 import { events } from '@/lib/events';
 import { LEVEL_TITLES, titleForPoints } from '@/lib/gamification';
 import { useLanguage } from '@/providers/LanguageProvider';
+import { saveCache, loadCache } from '@/lib/catchesCache';
 
 type CatchSummary = {
   id: string;
@@ -139,6 +140,7 @@ export default function HomeScreen() {
 
   const [recentCatches, setRecentCatches] = React.useState<CatchSummary[]>([]);
   const [loadingCatches, setLoadingCatches] = React.useState(false);
+  const [isOffline, setIsOffline] = React.useState(false);
   const [weather, setWeather] = React.useState<WeatherSnapshot | null>(null);
   const [loadingWeather, setLoadingWeather] = React.useState(false);
   const [weatherError, setWeatherError] = React.useState<string | null>(null);
@@ -196,25 +198,37 @@ export default function HomeScreen() {
   React.useEffect(() => {
     let cancelled = false;
     const fetchCatches = async () => {
-      if (!session?.user?.id) {
+      const uid = session?.user?.id;
+      if (!uid) {
         if (!cancelled) setRecentCatches([]);
         return;
       }
-      if (!cancelled) setLoadingCatches(true);
+
+      // Affiche le cache immédiatement (pas de spinner si on a du cache)
+      const cached = await loadCache<CatchSummary[]>(uid, 'home_catches');
+      if (cached && cached.length > 0 && !cancelled) {
+        setRecentCatches(cached);
+      } else if (!cancelled) {
+        setLoadingCatches(true);
+      }
+
       try {
         const { data, error } = await supabase
           .from('catches')
           .select('id,species,weight_kg,length_cm,caught_at,photo_path')
-          .eq('user_id', session.user.id)
+          .eq('user_id', uid)
           .order('caught_at', { ascending: false })
           .limit(3);
         if (error) throw error;
-        if (!cancelled) setRecentCatches((data as CatchSummary[]) ?? []);
-      } catch (error) {
+        const fresh = (data as CatchSummary[]) ?? [];
         if (!cancelled) {
-          console.warn('HomeScreen: unable to load recent catches', error);
-          setRecentCatches([]);
+          setRecentCatches(fresh);
+          setIsOffline(false);
         }
+        await saveCache(uid, 'home_catches', fresh);
+      } catch {
+        if (!cancelled && !cached) setRecentCatches([]);
+        if (!cancelled) setIsOffline(true);
       } finally {
         if (!cancelled) setLoadingCatches(false);
       }
@@ -494,6 +508,14 @@ export default function HomeScreen() {
             <ThemedText style={styles.progressHint}>{t('home_max_level')}</ThemedText>
           )}
         </View>
+
+        {/* ── Offline Banner ── */}
+        {isOffline && (
+          <View style={styles.offlineBanner}>
+            <Ionicons name="cloud-offline-outline" size={16} color="#92400E" />
+            <Text style={styles.offlineBannerText}>Mode hors ligne — données mises en cache</Text>
+          </View>
+        )}
 
         {/* ── Premium Banner ── */}
         {!isPremium && <PremiumBanner onPress={() => router.push('/premium')} />}
@@ -1242,5 +1264,25 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: C.white,
+  },
+
+  // ── Offline ──
+  offlineBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#FFFBEB',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginBottom: 10,
+  },
+  offlineBannerText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#92400E',
+    flex: 1,
   },
 });

@@ -14,7 +14,10 @@ import { AuthProvider, useAuth } from '@/providers/AuthProvider';
 import { LanguageProvider } from '@/providers/LanguageProvider';
 import { supabase } from '@/lib/supabase';
 import { initializePurchases, identifyUser } from '@/lib/purchases';
+import { initAnalytics, identifyAnalytics, resetAnalytics } from '@/lib/analytics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+
+initAnalytics();
 
 // Keep the splash screen visible until we finish loading critical app state.
 SplashScreen.preventAutoHideAsync().catch(() => {
@@ -131,10 +134,13 @@ function AuthGate({
     profileCheckRun.current = false;
   }, [session?.user?.id]);
 
-  // Lier l'utilisateur RevenueCat à la session Supabase
+  // Lier l'utilisateur RevenueCat + Analytics à la session Supabase
   React.useEffect(() => {
     if (session?.user?.id) {
       identifyUser(session.user.id);
+      identifyAnalytics(session.user.id, { email: session.user.email });
+    } else {
+      resetAnalytics();
     }
   }, [session?.user?.id]);
 
@@ -210,7 +216,7 @@ export default function RootLayout() {
         <AuthGate onReady={handleAuthReady}>
           {!appReady ? (
             <View style={loadingStyles.container}>
-              <Image source={require('../assets/images/icon_app.png')} style={loadingStyles.logo} resizeMode="contain" />
+              <Image source={require('../assets/images/logo-app.png')} style={loadingStyles.logo} resizeMode="contain" />
               <ActivityIndicator color="#2563EB" style={loadingStyles.spinner} />
             </View>
           ) : (

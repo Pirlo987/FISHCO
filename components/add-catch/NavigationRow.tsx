@@ -9,30 +9,17 @@ import { useLanguage } from '@/providers/LanguageProvider';
 type Props = {
   step: number;
   loading: boolean;
-  isFirstStep: boolean;
-  onBack: () => void;
   onNext: () => void;
 };
 
 export const NavigationRow = React.memo(function NavigationRow({
   step,
   loading,
-  isFirstStep,
-  onBack,
   onNext,
 }: Props) {
   const { t } = useLanguage();
   return (
-    <View style={[styles.row, isFirstStep && styles.rowStep1]}>
-      {step > 1 && (
-        <Pressable
-          style={({ pressed }) => [styles.backBtn, { opacity: pressed ? 0.7 : 1 }]}
-          onPress={onBack}
-        >
-          <Ionicons name="arrow-back" size={18} color={P.blueDeep} />
-          <ThemedText style={styles.backBtnText}>{t('nav_back')}</ThemedText>
-        </Pressable>
-      )}
+    <View style={styles.row}>
       <Pressable
         style={({ pressed }) => [styles.primaryWrapper, { opacity: pressed ? 0.9 : 1 }]}
         onPress={onNext}
@@ -62,30 +49,7 @@ export const NavigationRow = React.memo(function NavigationRow({
 
 const styles = StyleSheet.create({
   row: {
-    flexDirection: 'column',
-    gap: 10,
     marginTop: 28,
-  },
-  rowStep1: {
-    marginTop: 40,
-  },
-  backBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    backgroundColor: P.surface,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: P.border,
-    width: '100%',
-  },
-  backBtnText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: P.blueDeep,
   },
   primaryWrapper: {
     borderRadius: 14,

@@ -3,10 +3,12 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   View,
 } from 'react-native';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
@@ -21,14 +23,13 @@ import { useLanguage } from '@/providers/LanguageProvider';
 import { useImagePicker } from '@/hooks/useImagePicker';
 import { useSpeciesLoader } from '@/hooks/useSpeciesLoader';
 import { useAiClassification, prepareImageForUpload } from '@/hooks/useAiClassification';
-import { usePremium } from '@/hooks/usePremium';
-import type { AISuggestion } from '@/hooks/useAiClassification';
+import { trackEvent } from '@/lib/analytics';
 
 import { ProgressBar } from '@/components/add-catch/ProgressBar';
 import { NavigationRow } from '@/components/add-catch/NavigationRow';
 import { StepPhoto } from '@/components/add-catch/StepPhoto';
 import { StepSpecies } from '@/components/add-catch/StepSpecies';
-import type { CombinedSuggestion } from '@/components/add-catch/StepSpecies';
+import type { CombinedSuggestion, AiSuggestionWithImage } from '@/components/add-catch/StepSpecies';
 import { StepDetails } from '@/components/add-catch/StepDetails';
 import { StepPublish } from '@/components/add-catch/StepPublish';
 
@@ -58,16 +59,18 @@ if (!(global as any).btoa) {
 }
 
 type Step = 1 | 2 | 3 | 4;
+type SpeciesSubStep = 'ai' | 'db' | 'search';
 
 export default function AddCatchScreen() {
   const { t } = useLanguage();
   const router = useRouter();
   const { session } = useAuth();
-  const { isPremium } = usePremium();
   const insets = useSafeAreaInsets();
 
   // ── Form state ──
   const [step, setStep] = React.useState<Step>(1);
+  const [speciesSubStep, setSpeciesSubStep] = React.useState<SpeciesSubStep>('ai');
+  const [aiPickedSuggestion, setAiPickedSuggestion] = React.useState<AiSuggestionWithImage | null>(null);
   const [species, setSpecies] = React.useState('');
   const [weight, setWeight] = React.useState('');
   const [length, setLength] = React.useState('');
@@ -77,44 +80,47 @@ export default function AddCatchScreen() {
   const [title, setTitle] = React.useState('');
   const [description, setDescription] = React.useState('');
   const [loading, setLoading] = React.useState(false);
-  const [speciesFocused, setSpeciesFocused] = React.useState(false);
-  const [speciesTouched, setSpeciesTouched] = React.useState(false);
 
   const scrollRef = React.useRef<ScrollView | null>(null);
-  const speciesTouchedRef = React.useRef(speciesTouched);
   const forcedPrivateRef = React.useRef(false);
-
-  React.useEffect(() => { speciesTouchedRef.current = speciesTouched; }, [speciesTouched]);
 
   // ── Custom hooks ──
   const { image, imageAspect, pickImage, takePhoto, removeImage: rawRemoveImage } = useImagePicker();
-  const { isKnownSpecies: checkKnown, filterSpecies } = useSpeciesLoader();
+  const { speciesOptions, isKnownSpecies: checkKnown, filterSpecies } = useSpeciesLoader();
   const { aiLoading, aiError, aiSuggestions, clearAi, classify } = useAiClassification();
 
   const knownSpecies = React.useMemo(() => checkKnown(species), [checkKnown, species]);
 
-  // ── Species suggestions ──
-  const speciesSuggestions = React.useMemo(() => filterSpecies(species), [filterSpecies, species]);
-
-  const combinedSuggestions = React.useMemo<CombinedSuggestion[]>(() => {
-    const byKey = new Map<string, CombinedSuggestion>();
-    for (const s of aiSuggestions) {
+  // ── Suggestions IA enrichies avec images du catalogue ──
+  const aiSuggestionsWithImages = React.useMemo<AiSuggestionWithImage[]>(() => {
+    return aiSuggestions.map((s) => {
       const key = normalizeName(s.species);
-      if (!byKey.has(key)) byKey.set(key, { name: s.species, source: 'ai', confidence: s.confidence });
-    }
-    for (const s of speciesSuggestions) {
-      const key = normalizeName(s.name);
-      if (!byKey.has(key)) byKey.set(key, { name: s.name, source: 'list' });
-    }
-    return Array.from(byKey.values()).slice(0, 8);
-  }, [aiSuggestions, speciesSuggestions]);
+      const dbMatch = speciesOptions.find((o) => normalizeName(o.name) === key);
+      return { ...s, image: dbMatch?.image };
+    });
+  }, [aiSuggestions, speciesOptions]);
 
-  const showDropdown = React.useMemo(
-    () => combinedSuggestions.length > 0 && (speciesFocused || !!species.trim() || aiSuggestions.length > 0),
-    [aiSuggestions.length, species, speciesFocused, combinedSuggestions.length],
-  );
+  // ── Correspondances catalogue pour la suggestion IA choisie ──
+  const dbMatches = React.useMemo<CombinedSuggestion[]>(() => {
+    if (!aiPickedSuggestion) return [];
+    return filterSpecies(aiPickedSuggestion.species).map((s) => ({
+      name: s.name,
+      source: 'list' as const,
+      image: s.image,
+    }));
+  }, [aiPickedSuggestion, filterSpecies]);
 
-  // ── Visibility auto-switch for unknown species ──
+  // ── Résultats de la recherche manuelle ──
+  const searchResults = React.useMemo<CombinedSuggestion[]>(() => {
+    if (speciesSubStep !== 'search' || !species.trim()) return [];
+    return filterSpecies(species).map((s) => ({
+      name: s.name,
+      source: 'list' as const,
+      image: s.image,
+    }));
+  }, [speciesSubStep, species, filterSpecies]);
+
+  // ── Visibilité auto (espèce inconnue → privé) ──
   React.useEffect(() => {
     if (!knownSpecies) {
       if (visibility !== 'private') {
@@ -129,35 +135,34 @@ export default function AddCatchScreen() {
     }
   }, [knownSpecies, visibility]);
 
-  // ── AI classification trigger ──
+  // ── Déclenchement classification IA dès qu'une image est choisie ──
   React.useEffect(() => {
     if (image) {
       clearAi();
-      classify(image, (name) => {
-        if (!speciesTouchedRef.current) setSpecies(name);
-      });
+      classify(image);
     }
   }, [image, classify, clearAi]);
 
   // ── Handlers ──
-  const handleSpeciesChange = React.useCallback((v: string) => {
-    setSpecies(v);
-    setSpeciesTouched(true);
+  const handleSelectAiSuggestion = React.useCallback((s: AiSuggestionWithImage) => {
+    setAiPickedSuggestion(s);
+    setSpeciesSubStep('db');
   }, []);
 
-  const handleSpeciesFocus = React.useCallback(() => {
-    setSpeciesFocused(true);
+  const handleChooseOther = React.useCallback(() => {
+    setSpeciesSubStep('search');
+    setSpecies('');
   }, []);
 
-  const handleSpeciesBlur = React.useCallback(() => {
-    setTimeout(() => setSpeciesFocused(false), 120);
+  // Sélection finale d'une espèce → avance automatiquement à l'étape 3
+  const handleSelectSpecies = React.useCallback((name: string) => {
+    setSpecies(name);
+    setStep(3);
   }, []);
 
   const retryAi = React.useCallback(() => {
     if (!image) return;
-    classify(image, (name) => {
-      if (!speciesTouchedRef.current) setSpecies(name);
-    });
+    classify(image);
   }, [classify, image]);
 
   const removeImage = React.useCallback(() => {
@@ -167,6 +172,8 @@ export default function AddCatchScreen() {
 
   const resetForm = React.useCallback(() => {
     setStep(1);
+    setSpeciesSubStep('ai');
+    setAiPickedSuggestion(null);
     setSpecies('');
     setWeight('');
     setLength('');
@@ -175,10 +182,9 @@ export default function AddCatchScreen() {
     setVisibility('public');
     setTitle('');
     setDescription('');
-    setSpeciesFocused(false);
-    setSpeciesTouched(false);
+    rawRemoveImage();
     clearAi();
-  }, [clearAi]);
+  }, [rawRemoveImage, clearAi]);
 
   // ── Persist ──
   const persistCatch = React.useCallback(async () => {
@@ -221,6 +227,7 @@ export default function AddCatchScreen() {
 
       awardCatchPoints({ session, catchId: newCatch.id, species: species.trim(), knownSpecies });
       events.emit('catch:added', { species: species.trim(), catchId: newCatch.id });
+      trackEvent('catch_added', { species: species.trim(), is_public: isPublicAllowed, known_species: knownSpecies });
 
       if (!knownSpecies) {
         try {
@@ -247,16 +254,30 @@ export default function AddCatchScreen() {
   }, [session, image, weight, length, species, location, lure, visibility, title, description, knownSpecies, resetForm, router]);
 
   // ── Navigation ──
-  const showNav = step > 1 || !!image;
+  // Le bouton "Suivant" n'est visible qu'à l'étape recherche manuelle (step 2 search),
+  // ainsi qu'aux étapes 3 et 4. Les sous-étapes ai et db naviguent par tap sur les cartes.
+  const showNav = step === 1 ? !!image : (step === 2 ? speciesSubStep === 'search' : true);
 
   const handleBack = React.useCallback(() => {
-    setStep((s) => (s - 1) as Step);
-  }, []);
+    if (step === 2) {
+      if (speciesSubStep !== 'ai') {
+        // Retour vers les suggestions IA
+        setSpeciesSubStep('ai');
+        setSpecies('');
+        setAiPickedSuggestion(null);
+      } else {
+        // Retour vers l'étape photo
+        setStep(1);
+      }
+    } else {
+      setStep((s) => (s - 1) as Step);
+    }
+  }, [step, speciesSubStep]);
 
   const handleNext = React.useCallback(() => {
     if (step < 4) {
       if (step === 1 && !image) return Alert.alert(t('add_photo_required'));
-      if (step === 2 && !species) return Alert.alert(t('add_species_required'));
+      if (step === 2 && !species.trim()) return Alert.alert(t('add_species_required'));
       if (step === 3) {
         if (!location.trim()) return Alert.alert(t('add_location_required'), t('add_location_hint'));
         if (!weight.trim()) return Alert.alert(t('add_weight_required'), t('add_weight_hint'));
@@ -289,20 +310,26 @@ export default function AddCatchScreen() {
       case 2:
         return (
           <StepSpecies
-            species={species}
-            onChangeSpecies={handleSpeciesChange}
+            subStep={speciesSubStep}
             aiLoading={aiLoading}
             aiError={aiError}
+            aiSuggestions={aiSuggestionsWithImages}
             onRetryAi={retryAi}
-            suggestions={combinedSuggestions}
-            showDropdown={showDropdown}
-            onFocus={handleSpeciesFocus}
-            onBlur={handleSpeciesBlur}
+            onSelectAiSuggestion={handleSelectAiSuggestion}
+            onChooseOther={handleChooseOther}
+            aiPickedSuggestion={aiPickedSuggestion}
+            dbMatches={dbMatches}
+            searchQuery={species}
+            onChangeSearchQuery={setSpecies}
+            searchResults={searchResults}
+            onSelectSpecies={handleSelectSpecies}
+            selectedSpecies={species}
           />
         );
       case 3:
         return (
           <StepDetails
+            species={species}
             location={location}
             weight={weight}
             length={length}
@@ -337,12 +364,17 @@ export default function AddCatchScreen() {
           contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + TAB_BAR_SPACER }]}
           showsVerticalScrollIndicator={false}
         >
-          <View style={styles.header}>
-            <ThemedText style={styles.headerTitle}>{t('add_title')}</ThemedText>
-            <View style={styles.stepBadge}>
-              <ThemedText style={styles.stepBadgeText}>{step}/4</ThemedText>
+          {(step > 1 || speciesSubStep !== 'ai') && (
+            <View style={styles.header}>
+              <Pressable
+                onPress={handleBack}
+                style={({ pressed }) => [styles.backArrow, { opacity: pressed ? 0.6 : 1 }]}
+                hitSlop={8}
+              >
+                <Ionicons name="arrow-back" size={22} color={P.blueDeep} />
+              </Pressable>
             </View>
-          </View>
+          )}
 
           <ProgressBar current={step} />
 
@@ -352,8 +384,6 @@ export default function AddCatchScreen() {
             <NavigationRow
               step={step}
               loading={loading}
-              isFirstStep={step === 1}
-              onBack={handleBack}
               onNext={handleNext}
             />
           )}
@@ -373,14 +403,14 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 24,
   },
-  headerTitle: { fontSize: 20, fontWeight: '700', color: P.blueDeep, letterSpacing: -0.3 },
-  stepBadge: {
-    backgroundColor: P.blueGhost,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 3,
+  backArrow: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: P.surface,
     borderWidth: 1,
     borderColor: P.border,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  stepBadgeText: { fontSize: 13, fontWeight: '700', color: P.blue },
 });

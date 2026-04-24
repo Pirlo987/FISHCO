@@ -22,7 +22,7 @@ import * as Crypto from 'expo-crypto';
 import { ThemedSafeArea } from '@/components/SafeArea';
 import { supabase } from '@/lib/supabase';
 import { useGoogleAuth } from '@/hooks/useGoogleAuth';
-import { useFacebookAuth } from '@/hooks/useFacebookAuth';
+
 import { useLanguage } from '@/providers/LanguageProvider';
 
 export default function LoginScreen() {
@@ -141,7 +141,6 @@ export default function LoginScreen() {
   };
 
   const { signInWithGoogle } = useGoogleAuth({ onSuccess: completeSignin });
-  const { signInWithFacebook } = useFacebookAuth({ onSuccess: completeSignin });
 
   const onGoogle = async () => {
     setLoading(true);
@@ -152,20 +151,6 @@ export default function LoginScreen() {
         return;
       }
       Alert.alert(t('login_google_failed'), err?.message || t('auth_retry'));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const onFacebook = async () => {
-    setLoading(true);
-    try {
-      await signInWithFacebook();
-    } catch (err: any) {
-      if (err?.message?.includes('annulee') || err?.message?.includes('cancelled')) {
-        return;
-      }
-      Alert.alert(t('login_facebook_failed'), err?.message || t('auth_retry'));
     } finally {
       setLoading(false);
     }
@@ -256,15 +241,6 @@ export default function LoginScreen() {
                     accessibilityLabel={t('auth_with_google')}
                   >
                     <Ionicons name="logo-google" size={22} color="#DB4437" />
-                  </Pressable>
-                  <Pressable
-                    disabled={loading}
-                    onPress={onFacebook}
-                    style={({ pressed }) => [styles.socialBtn, pressed && { opacity: 0.85 }]}
-                    accessibilityRole="button"
-                    accessibilityLabel={t('auth_with_facebook')}
-                  >
-                    <Ionicons name="logo-facebook" size={22} color="#1877F2" />
                   </Pressable>
                 </View>
                 <View style={styles.dividerRow}>

@@ -2,7 +2,7 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { C } from '@/constants/communityPalette';
-import { displayName, catchPhotoUrl, formatTimeAgo, formatNumber } from '@/lib/communityHelpers';
+import { displayName, catchPhotoUrl, formatNumber } from '@/lib/communityHelpers';
 import { UserAvatar } from './UserAvatar';
 import { CatchPhoto } from './CatchPhoto';
 import { ActionBar } from './ActionBar';
@@ -54,7 +54,6 @@ export const CatchCard = React.memo(function CatchCard({
 }: Props) {
   const name = displayName(item.profiles);
   const photo = catchPhotoUrl(item.photo_path);
-  const timeAgo = formatTimeAgo(item.caught_at);
   const title = item.title?.trim();
   const location = item.region?.trim() || 'Lieu non precise';
   const species = item.species?.trim() || '—';
@@ -69,14 +68,11 @@ export const CatchCard = React.memo(function CatchCard({
           <UserAvatar profile={item.profiles} name={name} size={42} />
         </Pressable>
         <Pressable style={styles.headerInfo} onPress={() => onPressUser?.(item.user_id)} disabled={!onPressUser}>
-          <View style={styles.nameRow}>
-            <Text style={styles.userName} numberOfLines={1}>{name}</Text>
-            <View style={styles.locationRow}>
-              <Ionicons name="location-outline" size={14} color={C.sub} />
-              <Text style={styles.metaLocation} numberOfLines={1}>{location}</Text>
-            </View>
+          <Text style={styles.userName} numberOfLines={1}>{name}</Text>
+          <View style={styles.locationRow}>
+            <Ionicons name="location-outline" size={14} color={C.sub} />
+            <Text style={styles.metaLocation} numberOfLines={1}>{location}</Text>
           </View>
-          <Text style={styles.meta}>{timeAgo}</Text>
         </Pressable>
         <Pressable style={styles.moreBtn} hitSlop={10} onPress={() => onOpenMenu(item.id)}>
           <Ionicons name="ellipsis-horizontal" size={18} color={C.muted} />
@@ -165,15 +161,12 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   headerInfo: { flex: 1 },
-  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  userName: { fontWeight: '700', fontSize: 15, color: C.text, flexShrink: 1 },
-  meta: { fontSize: 12, color: C.muted, marginTop: 2 },
+  userName: { fontWeight: '700', fontSize: 15, color: C.text },
   locationRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    flexShrink: 1,
-    marginLeft: 'auto',
+    marginTop: 2,
   },
   metaLocation: { fontSize: 12, color: C.sub, flexShrink: 1 },
   moreBtn: { padding: 4 },

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Modal, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions, Image as RNImage } from 'react-native';
 import { usePulse } from '@/hooks/usePulse';
 import { Image } from 'expo-image';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
@@ -31,11 +31,14 @@ export default function CatchDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
 
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [item, setItem] = React.useState<CatchItem | null>(null);
   const [photoUrl, setPhotoUrl] = React.useState<string | null>(null);
+  const [imagePreviewVisible, setImagePreviewVisible] = React.useState(false);
+  const [imageSize, setImageSize] = React.useState<{ width: number; height: number } | null>(null);
 
   const urlFromPhotoPath = React.useCallback(async (path?: string | null) => {
     if (!path) return null;
@@ -78,6 +81,29 @@ export default function CatchDetailScreen() {
     };
   }, [id, urlFromPhotoPath]);
 
+  React.useEffect(() => {
+    if (!photoUrl) { setImageSize(null); return; }
+    let cancelled = false;
+    RNImage.getSize(photoUrl, (w, h) => { if (!cancelled) setImageSize({ width: w, height: h }); }, () => { if (!cancelled) setImageSize(null); });
+    return () => { cancelled = true; };
+  }, [photoUrl]);
+
+  const isPointInsideImage = React.useCallback((x: number, y: number) => {
+    if (!imageSize) return false;
+    const aspect = imageSize.width / imageSize.height;
+    const screenAspect = screenWidth / screenHeight;
+    let displayWidth = screenWidth;
+    let displayHeight = screenHeight;
+    if (aspect > screenAspect) {
+      displayHeight = screenWidth / aspect;
+    } else {
+      displayWidth = screenHeight * aspect;
+    }
+    const left = (screenWidth - displayWidth) / 2;
+    const top = (screenHeight - displayHeight) / 2;
+    return x >= left && x <= left + displayWidth && y >= top && y <= top + displayHeight;
+  }, [imageSize, screenWidth, screenHeight]);
+
   const goToSpecies = React.useCallback(() => {
     if (!item?.species) return;
     const key = normalizeName(item.species);
@@ -102,13 +128,15 @@ export default function CatchDetailScreen() {
         headerBackgroundColor={{ light: '#e6f1f5', dark: '#0f1416' }}
         headerImage={
           <View style={{ flex: 1, marginTop: -insets.top }}>
-            {photoUrl ? (
-              <Image source={{ uri: photoUrl }} style={styles.cover} contentFit="cover" />
-            ) : (
-              <View style={[styles.cover, styles.coverPlaceholder]}>
-                <Text style={{ fontSize: 42 }}>📷</Text>
-              </View>
-            )}
+            <Pressable onPress={() => photoUrl && setImagePreviewVisible(true)} style={{ flex: 1 }}>
+              {photoUrl ? (
+                <Image source={{ uri: photoUrl }} style={styles.cover} contentFit="cover" />
+              ) : (
+                <View style={[styles.cover, styles.coverPlaceholder]}>
+                  <Text style={{ fontSize: 42 }}>📷</Text>
+                </View>
+              )}
+            </Pressable>
             <Pressable onPress={() => router.back()} style={[styles.backBtn, { top: 12 + insets.top }]} hitSlop={10}>
               <Ionicons name="chevron-back" size={26} color="#000" />
             </Pressable>
@@ -150,6 +178,38 @@ export default function CatchDetailScreen() {
           </View>
         ) : null}
       </ParallaxScrollView>
+      <Modal
+        visible={imagePreviewVisible}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setImagePreviewVisible(false)}
+      >
+        <Pressable
+          style={styles.imageModalBackdrop}
+          onPress={(event) => {
+            const { locationX, locationY } = event.nativeEvent;
+            if (!isPointInsideImage(locationX, locationY)) setImagePreviewVisible(false);
+          }}
+        >
+          {photoUrl ? (
+            <ScrollView
+              style={styles.imageModalScroll}
+              contentContainerStyle={styles.imageModalContent}
+              minimumZoomScale={1}
+              maximumZoomScale={4}
+              showsHorizontalScrollIndicator={false}
+              showsVerticalScrollIndicator={false}
+              centerContent
+              bounces={false}
+            >
+              <Image source={{ uri: photoUrl }} style={styles.imageModalImage} contentFit="contain" />
+            </ScrollView>
+          ) : null}
+          <Pressable style={styles.imageModalClose} onPress={() => setImagePreviewVisible(false)}>
+            <Ionicons name="close" size={26} color="#FFFFFF" />
+          </Pressable>
+        </Pressable>
+      </Modal>
     </>
   );
 }
@@ -207,4 +267,21 @@ const styles = StyleSheet.create({
   section: { marginTop: 16, gap: 8 },
   sectionLabel: { fontWeight: '600', fontSize: 16 },
   sectionText: { fontSize: 16, color: '#222' },
+  imageModalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imageModalScroll: { width: '100%', height: '100%' },
+  imageModalContent: { flexGrow: 1, justifyContent: 'center', alignItems: 'center' },
+  imageModalImage: { width: '100%', height: '100%', borderRadius: 0, backgroundColor: '#000' },
+  imageModalClose: {
+    position: 'absolute',
+    top: 40,
+    right: 24,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    borderRadius: 20,
+    padding: 6,
+  },
 });

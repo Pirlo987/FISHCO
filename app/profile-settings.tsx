@@ -285,6 +285,34 @@ export default function ProfileSettingsScreen() {
     await signOut();
   };
 
+  const onDeleteAccount = () => {
+    Alert.alert(
+      'Supprimer mon compte',
+      'Cette action est irréversible. Toutes tes données (profil, prises, photos) seront supprimées définitivement dans un délai de 30 jours.',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Supprimer',
+          style: 'destructive',
+          onPress: async () => {
+            if (!session?.user?.id) return;
+            try {
+              const uid = session.user.id;
+              await supabase.from('likes').delete().eq('user_id', uid);
+              await supabase.from('profile_points').delete().eq('user_id', uid);
+              await supabase.from('catches').delete().eq('user_id', uid);
+              await supabase.from('profiles').delete().eq('id', uid);
+              router.replace('/onboarding');
+              await signOut();
+            } catch (e: any) {
+              Alert.alert('Erreur', e?.message ?? 'La suppression a échoué. Contacte support@fishbook.app');
+            }
+          },
+        },
+      ]
+    );
+  };
+
 
   // ── Derived ─────────────────────────────────────────────────────────────────
   const email = session?.user?.email ?? null;
@@ -609,6 +637,14 @@ export default function ProfileSettingsScreen() {
                 <Text style={styles.logoutText}>{t('settings_logout')}</Text>
               </Pressable>
 
+              <Pressable
+                onPress={onDeleteAccount}
+                style={({ pressed }) => [styles.deleteBtn, pressed && { opacity: 0.8 }]}
+              >
+                <Ionicons name="trash-outline" size={18} color="#9CA3AF" />
+                <Text style={styles.deleteText}>Supprimer mon compte</Text>
+              </Pressable>
+
             </>
           )}
         </ScrollView>
@@ -867,4 +903,13 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   logoutText: { color: '#EF4444', fontWeight: '700', fontSize: 15 },
+  deleteBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    marginTop: 4,
+  },
+  deleteText: { color: '#9CA3AF', fontWeight: '500', fontSize: 13 },
 });
