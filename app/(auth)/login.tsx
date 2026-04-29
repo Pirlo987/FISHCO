@@ -203,12 +203,18 @@ export default function LoginScreen() {
               <Pressable
                 onPress={() => setLocale('fr')}
                 style={[styles.langBtn, locale === 'fr' && styles.langBtnActive]}
+                accessibilityRole="button"
+                accessibilityLabel={t('lang_fr')}
+                accessibilityState={{ selected: locale === 'fr' }}
               >
                 <Text style={[styles.langBtnText, locale === 'fr' && styles.langBtnTextActive]}>FR</Text>
               </Pressable>
               <Pressable
                 onPress={() => setLocale('en')}
                 style={[styles.langBtn, locale === 'en' && styles.langBtnActive]}
+                accessibilityRole="button"
+                accessibilityLabel={t('lang_en')}
+                accessibilityState={{ selected: locale === 'en' }}
               >
                 <Text style={[styles.langBtnText, locale === 'en' && styles.langBtnTextActive]}>EN</Text>
               </Pressable>
@@ -279,16 +285,39 @@ export default function LoginScreen() {
                     placeholderTextColor="#A0A7B1"
                     returnKeyType="done"
                   />
-                  <Pressable onPress={() => setShowPassword((v) => !v)} style={styles.eyeBtn} hitSlop={8}>
+                  <Pressable
+                    onPress={() => setShowPassword((v) => !v)}
+                    style={styles.eyeBtn}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel={showPassword ? t('a11y_hide_password') : t('a11y_show_password')}
+                  >
                     <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color="#A0A7B1" />
                   </Pressable>
                 </View>
                 {!!passwordError && <Text style={styles.fieldError}>{passwordError}</Text>}
+
+                <Pressable
+                  onPress={() => router.push('/(auth)/forgot-password')}
+                  style={styles.forgotBtn}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('login_forgot_password')}
+                >
+                  <Text style={styles.forgotText}>{t('login_forgot_password')}</Text>
+                </Pressable>
               </View>
             </View>
 
             <View style={styles.ctaBlock}>
-              <Pressable onPress={onLogin} disabled={loading} style={[styles.primaryWrapper, loading && { opacity: 0.88 }]}>
+              <Pressable
+                onPress={onLogin}
+                disabled={loading}
+                style={[styles.primaryWrapper, loading && { opacity: 0.88 }]}
+                accessibilityRole="button"
+                accessibilityLabel={t('login_cta')}
+                accessibilityState={{ disabled: loading }}
+              >
                 <View style={styles.primaryButton}>
                   <Text style={styles.primaryText}>{loading ? t('login_signing_in') : t('login_cta')}</Text>
                 </View>
@@ -377,6 +406,8 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginTop: -8,
   },
+  forgotBtn: { alignSelf: 'flex-end' },
+  forgotText: { color: '#1D4ED8', fontSize: 13, fontWeight: '600' },
   ctaBlock: { gap: 14, marginTop: 16, paddingBottom: 8 },
   primaryWrapper: {
     borderRadius: 16,

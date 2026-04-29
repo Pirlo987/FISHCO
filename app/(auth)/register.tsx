@@ -276,7 +276,13 @@ export default function RegisterScreen() {
                     placeholderTextColor="#A0A7B1"
                     returnKeyType="done"
                   />
-                  <Pressable onPress={() => setShowPassword((v) => !v)} style={styles.eyeBtn} hitSlop={8}>
+                  <Pressable
+                    onPress={() => setShowPassword((v) => !v)}
+                    style={styles.eyeBtn}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel={showPassword ? t('a11y_hide_password') : t('a11y_show_password')}
+                  >
                     <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color="#A0A7B1" />
                   </Pressable>
                 </View>
@@ -285,7 +291,14 @@ export default function RegisterScreen() {
             </View>
 
             <View style={styles.ctaBlock}>
-              <Pressable onPress={onRegister} disabled={loading} style={[styles.primaryWrapper, loading && { opacity: 0.88 }]}>
+              <Pressable
+                onPress={onRegister}
+                disabled={loading}
+                style={[styles.primaryWrapper, loading && { opacity: 0.88 }]}
+                accessibilityRole="button"
+                accessibilityLabel={t('register_cta')}
+                accessibilityState={{ disabled: loading }}
+              >
                 <View style={styles.primaryButton}>
                   <Text style={styles.primaryText}>{loading ? t('register_registering') : t('register_cta')}</Text>
                 </View>

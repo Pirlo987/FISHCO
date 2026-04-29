@@ -187,6 +187,8 @@ export default function PremiumScreen() {
         onPress={() => router.back()}
         hitSlop={12}
         style={[styles.closeBtn, { top: insets.top + 12 }]}
+        accessibilityRole="button"
+        accessibilityLabel="Fermer"
       >
         <Ionicons name="close" size={20} color="#64748B" />
       </Pressable>
@@ -204,6 +206,9 @@ export default function PremiumScreen() {
               <Pressable
                 onPress={() => setSelectedPlan('annual')}
                 style={[styles.planCard, selectedPlan === 'annual' && styles.planCardSelected]}
+                accessibilityRole="radio"
+                accessibilityLabel={`Annuel — ${annualPriceLabel} / an`}
+                accessibilityState={{ checked: selectedPlan === 'annual' }}
               >
                 <View style={styles.popularBadge}>
                   <ThemedText style={styles.popularText}>-44%</ThemedText>
@@ -228,6 +233,9 @@ export default function PremiumScreen() {
               <Pressable
                 onPress={() => setSelectedPlan('monthly')}
                 style={[styles.planCard, selectedPlan === 'monthly' && styles.planCardSelected]}
+                accessibilityRole="radio"
+                accessibilityLabel={`Mensuel — ${monthlyPriceLabel} / mois`}
+                accessibilityState={{ checked: selectedPlan === 'monthly' }}
               >
                 <View style={[styles.radio, selectedPlan === 'monthly' && styles.radioSelected]}>
                   {selectedPlan === 'monthly' && <View style={styles.radioDot} />}
@@ -249,6 +257,9 @@ export default function PremiumScreen() {
               <Pressable
                 onPress={() => setSelectedPlan('lifetime')}
                 style={[styles.planCard, styles.planCardLifetime, selectedPlan === 'lifetime' && styles.planCardLifetimeSelected]}
+                accessibilityRole="radio"
+                accessibilityLabel={`À vie — ${lifetimePriceLabel}`}
+                accessibilityState={{ checked: selectedPlan === 'lifetime' }}
               >
                 <View style={styles.earlyBirdBadge}>
                   <Ionicons name="flash" size={11} color="#FFFFFF" />
@@ -333,6 +344,15 @@ export default function PremiumScreen() {
             styles.ctaBtn,
             { opacity: pressed || purchasing ? 0.85 : 1 },
           ]}
+          accessibilityRole="button"
+          accessibilityLabel={
+            selectedPlan === 'annual'
+              ? `Passer Premium — ${annualPriceLabel} par an`
+              : selectedPlan === 'lifetime'
+              ? `Accès à vie — ${lifetimePriceLabel}`
+              : `Passer Premium — ${monthlyPriceLabel} par mois`
+          }
+          accessibilityState={{ disabled: purchasing || loadingOfferings }}
         >
           <LinearGradient
             colors={['#B45309', '#D97706']}
@@ -362,6 +382,9 @@ export default function PremiumScreen() {
           onPress={handleRestore}
           disabled={restoring}
           style={styles.restoreBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Restaurer mes achats"
+          accessibilityState={{ disabled: restoring }}
         >
           {restoring ? (
             <ActivityIndicator color="#94A3B8" size="small" />

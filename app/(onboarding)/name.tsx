@@ -96,7 +96,17 @@ export default function NameStep() {
     // Convertir JJ/MM/AAAA en AAAA-MM-JJ pour le backend
     const [day, month, year] = dob.split('/');
     const formattedDob = `${year}-${month}-${day}`;
-    
+
+    // Vérifier l'âge minimum (13 ans)
+    const birthDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+    const today = new Date();
+    const age = today.getFullYear() - birthDate.getFullYear()
+      - (today < new Date(today.getFullYear(), birthDate.getMonth(), birthDate.getDate()) ? 1 : 0);
+    if (age < 13) {
+      Alert.alert(t('onboard_name_age_title'), t('onboard_name_age_msg'));
+      return;
+    }
+
     await mergeProfileDraft(session, { firstName, lastName, dob: formattedDob });
     await AsyncStorage.setItem('onboarding_seen', '1');
     router.push('/(onboarding)/country');

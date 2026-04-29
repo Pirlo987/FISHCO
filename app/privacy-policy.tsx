@@ -11,7 +11,7 @@ const SECTIONS = [
   },
   {
     title: '2. Utilisation des données',
-    body: 'Tes données servent à faire fonctionner l\'application : afficher ton profil, gérer tes prises, te permettre d\'interagir avec la communauté et d\'utiliser la détection d\'espèces par IA. Nous n\'utilisons jamais tes données à des fins publicitaires.',
+    body: 'Tes données servent à faire fonctionner l\'application : afficher ton profil, gérer tes prises, te permettre d\'interagir avec la communauté et d\'utiliser la détection d\'espèces par IA. Nous utilisons également un outil d\'analyse (PostHog) pour comprendre l\'usage de l\'application et l\'améliorer. Ces analyses sont liées à ton compte et non vendues à des tiers. Nous n\'utilisons jamais tes données à des fins publicitaires.',
   },
   {
     title: '3. Localisation',
@@ -26,6 +26,10 @@ const SECTIONS = [
     body: 'Tes prises marquées comme "publiques" sont visibles par tous les utilisateurs. Tes prises privées ne sont visibles que par toi. Nous ne vendons jamais tes données à des tiers. Nous pouvons partager des données agrégées et anonymisées à des fins de statistiques.',
   },
   {
+    title: '5bis. Sous-traitants',
+    body: 'FishBook fait appel aux sous-traitants suivants pour assurer le fonctionnement du service :\n\n• Supabase (base de données et stockage des fichiers) — hébergé dans l\'UE\n• OpenAI (détection d\'espèces par IA) — données de photos uniquement, non conservées\n• RevenueCat (gestion des abonnements et paiements)\n• PostHog (analyses d\'usage anonymisées)\n\nChacun de ces prestataires est soumis à des garanties de protection des données conformes au RGPD.',
+  },
+  {
     title: '6. Sécurité',
     body: 'Tes données sont stockées de manière sécurisée via Supabase (chiffrement en transit et au repos). L\'accès à tes données personnelles est protégé par des règles de sécurité strictes (Row Level Security).',
   },
@@ -35,7 +39,7 @@ const SECTIONS = [
   },
   {
     title: '8. Conservation des données',
-    body: 'Tes données sont conservées aussi longtemps que ton compte est actif. En cas de suppression de compte, toutes tes données personnelles sont effacées sous 30 jours.',
+    body: 'Tes données sont conservées aussi longtemps que ton compte est actif. En cas de suppression de compte, toutes tes données personnelles (profil, prises, photos, points) sont supprimées immédiatement et de manière permanente.',
   },
   {
     title: '9. Contact',
@@ -58,7 +62,7 @@ export default function PrivacyPolicyScreen() {
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <Text style={styles.intro}>
-          Dernière mise à jour : mars 2025
+          Dernière mise à jour : avril 2026
           {'\n\n'}
           FishBook (ci-après "nous") s'engage à protéger ta vie privée. Cette politique explique comment nous collectons, utilisons et protégeons tes données personnelles.
         </Text>

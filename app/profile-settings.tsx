@@ -5,6 +5,7 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -285,10 +286,43 @@ export default function ProfileSettingsScreen() {
     await signOut();
   };
 
+  const [exporting, setExporting] = React.useState(false);
+
+  const onExportData = async () => {
+    if (!session?.user?.id) return;
+    setExporting(true);
+    try {
+      const uid = session.user.id;
+      const [profileRes, catchesRes, pointsRes] = await Promise.all([
+        supabase.from('profiles').select('*').eq('id', uid).maybeSingle(),
+        supabase.from('catches').select('*').eq('user_id', uid),
+        supabase.from('profile_points').select('*').eq('user_id', uid).maybeSingle(),
+      ]);
+
+      const payload = {
+        exported_at: new Date().toISOString(),
+        profile: profileRes.data ?? null,
+        catches: catchesRes.data ?? [],
+        points: pointsRes.data ?? null,
+      };
+
+      const json = JSON.stringify(payload, null, 2);
+
+      await Share.share({
+        title: t('settings_export_filename'),
+        message: json,
+      });
+    } catch {
+      Alert.alert('Erreur', t('settings_export_error'));
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const onDeleteAccount = () => {
     Alert.alert(
       'Supprimer mon compte',
-      'Cette action est irréversible. Toutes tes données (profil, prises, photos) seront supprimées définitivement dans un délai de 30 jours.',
+      'Cette action est irréversible. Toutes tes données (profil, prises, photos) seront supprimées immédiatement et de manière permanente.',
       [
         { text: 'Annuler', style: 'cancel' },
         {
@@ -615,6 +649,26 @@ export default function ProfileSettingsScreen() {
                   </View>
                   <Text style={styles.navLabel} numberOfLines={1}>{t('settings_import')}</Text>
                   <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
+                </Pressable>
+                <View style={styles.navDivider} />
+                <Pressable
+                  style={({ pressed }) => [styles.navRow, pressed && styles.navRowPressed]}
+                  onPress={onExportData}
+                  disabled={exporting}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('settings_export_data')}
+                  accessibilityState={{ disabled: exporting }}
+                >
+                  <View style={[styles.navIcon, { backgroundColor: '#F0FDF4' }]}>
+                    {exporting
+                      ? <ActivityIndicator size="small" color="#16A34A" />
+                      : <Ionicons name="download-outline" size={18} color="#16A34A" />
+                    }
+                  </View>
+                  <Text style={styles.navLabel} numberOfLines={1}>
+                    {exporting ? t('settings_export_loading') : t('settings_export_data')}
+                  </Text>
+                  {!exporting && <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />}
                 </Pressable>
                 <View style={styles.navDivider} />
                 <Pressable

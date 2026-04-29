@@ -8,6 +8,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import React from 'react';
 import { ActivityIndicator, Image, StyleSheet, View } from 'react-native';
+import * as Linking from 'expo-linking';
 
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { AuthProvider, useAuth } from '@/providers/AuthProvider';
@@ -15,9 +16,9 @@ import { LanguageProvider } from '@/providers/LanguageProvider';
 import { supabase } from '@/lib/supabase';
 import { initializePurchases, identifyUser } from '@/lib/purchases';
 import { initAnalytics, identifyAnalytics, resetAnalytics } from '@/lib/analytics';
+import { resetUrlStore } from '@/lib/resetUrlStore';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-initAnalytics();
 
 // Keep the splash screen visible until we finish loading critical app state.
 SplashScreen.preventAutoHideAsync().catch(() => {
@@ -134,9 +135,11 @@ function AuthGate({
     profileCheckRun.current = false;
   }, [session?.user?.id]);
 
-  // Lier l'utilisateur RevenueCat + Analytics à la session Supabase
+  // Analytics : initialiser et identifier uniquement après consentement implicite
+  // (l'utilisateur a accepté la Privacy Policy lors de l'inscription)
   React.useEffect(() => {
     if (session?.user?.id) {
+      initAnalytics();
       identifyUser(session.user.id);
       identifyAnalytics(session.user.id, { email: session.user.email });
     } else {
@@ -149,7 +152,7 @@ function AuthGate({
 
     const firstSeg = Array.isArray(segments) && segments.length > 0 ? (segments as any)[0] : undefined;
     const inAuthGroup = typeof pathname === 'string' && (
-      pathname.startsWith('/(auth)/') || pathname === '/login' || pathname === '/register' || firstSeg === '(auth)'
+      pathname.startsWith('/(auth)/') || pathname === '/login' || pathname === '/register' || firstSeg === '(auth)' || pathname === '/reset-password'
     );
     const inOnboarding = typeof pathname === 'string' && (
       pathname.startsWith('/(onboarding)/') || pathname === '/onboarding' || firstSeg === '(onboarding)'
@@ -196,6 +199,25 @@ export default function RootLayout() {
     initializePurchases();
   }, []);
 
+  // Intercepter les deep links de reset password avant qu'Expo Router ne consomme l'URL
+  React.useEffect(() => {
+    const storeIfReset = (url: string) => {
+      if (url.includes('reset-password')) {
+        resetUrlStore.set(url);
+      }
+    };
+
+    // Warm start : app déjà en mémoire
+    const sub = Linking.addEventListener('url', ({ url }) => storeIfReset(url));
+
+    // Cold start : app lancée par le lien
+    Linking.getInitialURL().then((url) => {
+      if (url) storeIfReset(url);
+    });
+
+    return () => sub.remove();
+  }, []);
+
   const handleAuthReady = React.useCallback(() => {
     setAppReady(true);
   }, []);
@@ -210,6 +232,7 @@ export default function RootLayout() {
   if (!loaded) return null;
 
   return (
+    <ErrorBoundary>
     <LanguageProvider>
     <AuthProvider>
       <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
@@ -230,6 +253,7 @@ export default function RootLayout() {
               <Stack.Screen name="user" options={{ headerShown: false }} />
               <Stack.Screen name="profile-settings" options={{ headerShown: false, presentation: 'modal' }} />
               <Stack.Screen name="premium" options={{ headerShown: false }} />
+              <Stack.Screen name="reset-password" options={{ headerShown: false }} />
               <Stack.Screen name="+not-found" />
             </Stack>
           )}
@@ -238,6 +262,7 @@ export default function RootLayout() {
       </ThemeProvider>
     </AuthProvider>
     </LanguageProvider>
+    </ErrorBoundary>
   );
 }
 
