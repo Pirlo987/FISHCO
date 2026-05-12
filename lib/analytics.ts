@@ -14,12 +14,12 @@ export function initAnalytics(): void {
   }
 }
 
-export function identifyAnalytics(userId: string, traits?: Record<string, unknown>): void {
-  client?.identify(userId, traits);
+export function identifyAnalytics(userId: string, traits?: Record<string, any>): void {
+  client?.identify(userId, traits as any);
 }
 
-export function trackEvent(event: string, properties?: Record<string, unknown>): void {
-  client?.capture(event, properties);
+export function trackEvent(event: string, properties?: Record<string, any>): void {
+  client?.capture(event, properties as any);
 }
 
 export function resetAnalytics(): void {

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { Sentry } from '@/lib/sentry';
 
 type Props = { children: React.ReactNode };
 type State = { error: Error | null };
@@ -13,7 +14,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
-    // Ici on pourrait envoyer à Sentry quand il sera configuré
+    Sentry.captureException(error, { extra: { componentStack: info.componentStack } });
     console.error('[ErrorBoundary]', error.message, info.componentStack);
   }
 

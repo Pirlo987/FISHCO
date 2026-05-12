@@ -144,12 +144,6 @@ export default function RegisterScreen() {
       return;
     }
     await AsyncStorage.setItem('profile_onboarding_pending', '1');
-    if (!data.session) {
-      Alert.alert(
-        t('register_verify_title'),
-        t('register_verify_msg')
-      );
-    }
     router.replace('/(onboarding)/name');
   };
 

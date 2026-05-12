@@ -145,9 +145,17 @@ export default function AddCatchScreen() {
 
   // ── Handlers ──
   const handleSelectAiSuggestion = React.useCallback((s: AiSuggestionWithImage) => {
-    setAiPickedSuggestion(s);
-    setSpeciesSubStep('db');
-  }, []);
+    const matches = filterSpecies(s.species);
+    if (matches.length > 0) {
+      // Espèce trouvée dans le catalogue → sélection directe sans passer par l'étape DB
+      setSpecies(matches[0].name);
+      setStep(3);
+    } else {
+      // Espèce inconnue du catalogue → afficher l'étape de confirmation
+      setAiPickedSuggestion(s);
+      setSpeciesSubStep('db');
+    }
+  }, [filterSpecies]);
 
   const handleChooseOther = React.useCallback(() => {
     setSpeciesSubStep('search');
@@ -196,6 +204,13 @@ export default function AddCatchScreen() {
 
     setLoading(true);
     try {
+      const { count: prevCount } = await supabase
+        .from('catches')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', session.user.id)
+        .eq('species', species.trim());
+      const isFirstCatch = (prevCount ?? 0) === 0;
+
       const prepared = await prepareImageForUpload(image);
       const filePath = `catches/${session.user.id}/${Date.now()}.jpg`;
       const { error: storageError } = await supabase.storage
@@ -225,7 +240,7 @@ export default function AddCatchScreen() {
         .single();
       if (dbError) throw dbError;
 
-      awardCatchPoints({ session, catchId: newCatch.id, species: species.trim(), knownSpecies });
+      awardCatchPoints({ session, catchId: newCatch.id, species: species.trim(), knownSpecies, firstForUser: isFirstCatch, isPublic: isPublicAllowed, personalBest: false });
       events.emit('catch:added', { species: species.trim(), catchId: newCatch.id });
       trackEvent('catch_added', { species: species.trim(), is_public: isPublicAllowed, known_species: knownSpecies });
 
@@ -244,8 +259,14 @@ export default function AddCatchScreen() {
         }
       }
 
+      const speciesName = species.trim();
+      const catchId = newCatch.id;
       resetForm();
-      router.replace('/(tabs)/explore');
+      if (isFirstCatch && knownSpecies) {
+        router.replace({ pathname: '/species/[slug]', params: { slug: normalizeName(speciesName), name: speciesName } });
+      } else {
+        router.replace({ pathname: '/catches/[id]', params: { id: catchId } });
+      }
     } catch (err: any) {
       Alert.alert(t('add_error'), err.message || t('add_error_occurred'));
     } finally {

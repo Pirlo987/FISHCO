@@ -19,6 +19,7 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import * as FileSystem from 'expo-file-system/legacy';
 import { decode } from 'base64-arraybuffer';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemedSafeArea } from '@/components/SafeArea';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/lib/supabase';
@@ -26,114 +27,6 @@ import { awardCatchPoints } from '@/lib/gamification';
 import { normalizeName } from '@/constants/species';
 import { useSpeciesLoader } from '@/hooks/useSpeciesLoader';
 import { events } from '@/lib/events';
-
-// Liste étendue de toutes les espèces pêchables (eau douce + mer)
-// Noms alignés sur le champ `name` de la table species en BDD
-// après migration supabase/species_migration.sql
-const ALL_FISHABLE_SPECIES = [
-  // ── Eau douce ────────────────────────────────────────────────
-  'Ablette',
-  'Anguille',
-  'Barbeau',
-  'Black-bass',
-  'Breme',
-  'Brochet',
-  'Carpe amour',
-  'Carpe commune',
-  'Carpe cuir',
-  'Carpe miroir',
-  'Chevesne',
-  'Gardon',
-  'Goujon',
-  'Ide melanote',
-  'Lotte de riviere',
-  'Ombre commun',
-  'Omble chevalier',
-  'Perche',
-  'Perche soleil',
-  'Poisson-chat',
-  'Rotengle',
-  'Sandre',
-  'Silure glane',
-  'Tanche',
-  'Truite arc-en-ciel',
-  'Truite de lac',
-  'Truite fario',
-  'Vairon',
-  'Vandoise',
-  // ── Migrateurs ───────────────────────────────────────────────
-  'Saumon atlantique',
-  'Eperlan',
-  // ── Mer ──────────────────────────────────────────────────────
-  'Bar',
-  'Barbue',
-  'Bonite a dos raye',
-  'Cabillaud',
-  'Carangue GT',
-  'Chinchard',
-  'Congre',
-  'Dorade grise',
-  'Dorade royale',
-  'Espadon',
-  'Germon',
-  'Grondin gris',
-  'Grondin rouge',
-  'Hareng',
-  'Jobfish vert',
-  'Kawakawa',
-  'Kob',
-  'Leerfish',
-  'Lieu jaune',
-  'Lieu noir',
-  'Little tunny',
-  'Listao',
-  'Lotte de mer',
-  'Mahi-mahi',
-  'Maquereau',
-  'Marlin bleu',
-  'Marlin bleu Indo-Pacifique',
-  'Marlin noir',
-  'Marlin raye',
-  'Merou brun',
-  'Merlan',
-  'Mulet',
-  'Oblade',
-  'Orphie',
-  'Pagre',
-  'Pageot',
-  'Raie',
-  'Rouget barbet',
-  'Saint-Pierre',
-  'Sar commun',
-  'Sardine',
-  'Saupe',
-  'Seriole',
-  'Sole commune',
-  'Tacaud',
-  'Thon jaune',
-  'Thon obese',
-  'Thon rouge',
-  'Turbot',
-  'Vieille',
-  'Voilier',
-  // ── Monde ────────────────────────────────────────────────────
-  'Arapaima',
-  'Barramundi',
-  'Blue catfish',
-  'Bluegill',
-  'Channel catfish',
-  'Dorado',
-  'Giant snakehead',
-  'Largemouth bass',
-  'Peacock bass',
-  'Perche du Nil',
-  'Piranha rouge',
-  'Saumon chinook',
-  'Saumon coho',
-  'Striped bass',
-  'Walleye',
-  'Wahoo',
-].sort((a, b) => a.localeCompare(b, 'fr'));
 
 type CatchEntry = {
   id: string;
@@ -147,9 +40,10 @@ type CatchEntry = {
 };
 
 export default function ImportCatchesStep() {
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const { session } = useAuth();
-  const { isKnownSpecies, speciesOptions } = useSpeciesLoader();
+  const { speciesOptions } = useSpeciesLoader();
   const { from } = useLocalSearchParams<{ from?: string }>();
   const isFromSettings = from === 'settings';
 
@@ -163,7 +57,7 @@ export default function ImportCatchesStep() {
   const [catches, setCatches] = useState<CatchEntry[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // État du modal
+  // État modal
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedSpecies, setSelectedSpecies] = useState('');
   const [formTaille, setFormTaille] = useState('');
@@ -171,12 +65,25 @@ export default function ImportCatchesStep() {
   const [formAppat, setFormAppat] = useState('');
   const [formVille, setFormVille] = useState('');
   const [formPhoto, setFormPhoto] = useState<ImagePicker.ImagePickerAsset | null>(null);
+  const [formErrors, setFormErrors] = useState({ taille: false, poids: false, ville: false });
+
+  // Focus states
+  const [searchFocused, setSearchFocused] = useState(false);
+  const [tailleFocused, setTailleFocused] = useState(false);
+  const [poidsFocused, setPoidsFocused] = useState(false);
+  const [villeFocused, setVilleFocused] = useState(false);
+  const [appatFocused, setAppatFocused] = useState(false);
+
+  const sortedSpeciesNames = useMemo(
+    () => speciesOptions.map((s) => s.name).sort((a, b) => a.localeCompare(b, 'fr')),
+    [speciesOptions],
+  );
 
   const filteredSpecies = useMemo(() => {
     const q = normalizeName(query);
-    if (!q) return ALL_FISHABLE_SPECIES;
-    return ALL_FISHABLE_SPECIES.filter((s) => normalizeName(s).includes(q));
-  }, [query]);
+    if (!q) return sortedSpeciesNames;
+    return sortedSpeciesNames.filter((s) => normalizeName(s).includes(q));
+  }, [query, sortedSpeciesNames]);
 
   const openModal = useCallback((species: string) => {
     setSelectedSpecies(species);
@@ -185,6 +92,7 @@ export default function ImportCatchesStep() {
     setFormAppat('');
     setFormVille('');
     setFormPhoto(null);
+    setFormErrors({ taille: false, poids: false, ville: false });
     setModalVisible(true);
   }, []);
 
@@ -201,7 +109,15 @@ export default function ImportCatchesStep() {
 
   const addCatch = useCallback(() => {
     if (!selectedSpecies) return;
-    // Utiliser le nom exact de la BDD pour garantir le match dans le fishdex
+    const errors = {
+      taille: !formTaille.trim(),
+      poids: !formPoids.trim(),
+      ville: !formVille.trim(),
+    };
+    if (errors.taille || errors.poids || errors.ville) {
+      setFormErrors(errors);
+      return;
+    }
     const normalizedSelected = normalizeName(selectedSpecies);
     const dbMatch = speciesOptions.find((s) => normalizeName(s.name) === normalizedSelected);
     const speciesName = dbMatch?.name ?? selectedSpecies;
@@ -217,29 +133,32 @@ export default function ImportCatchesStep() {
     };
     setCatches((prev) => [...prev, entry]);
     setModalVisible(false);
-  }, [selectedSpecies, formTaille, formPoids, formAppat, formVille, formPhoto, isKnownSpecies]);
+  }, [selectedSpecies, formTaille, formPoids, formAppat, formVille, formPhoto, speciesOptions]);
 
   const removeCatch = useCallback((id: string) => {
     setCatches((prev) => prev.filter((c) => c.id !== id));
   }, []);
 
-  const uploadCatchPhoto = useCallback(async (asset: ImagePicker.ImagePickerAsset, userId: string): Promise<string | null> => {
-    const manipulated = await ImageManipulator.manipulateAsync(asset.uri, [], {
-      compress: 0.85,
-      format: ImageManipulator.SaveFormat.JPEG,
-    });
-    const stamp = new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 14);
-    const rand = Math.random().toString(36).slice(2, 8);
-    const filePath = `${userId}/${stamp}-${rand}.jpg`;
-    const base64 = await FileSystem.readAsStringAsync(manipulated.uri, {
-      encoding: FileSystem.EncodingType.Base64,
-    });
-    const { error } = await supabase.storage
-      .from('catch-photos')
-      .upload(filePath, decode(base64), { contentType: 'image/jpeg', cacheControl: '3600', upsert: false });
-    if (error) throw error;
-    return filePath;
-  }, []);
+  const uploadCatchPhoto = useCallback(
+    async (asset: ImagePicker.ImagePickerAsset, userId: string): Promise<string | null> => {
+      const manipulated = await ImageManipulator.manipulateAsync(asset.uri, [], {
+        compress: 0.85,
+        format: ImageManipulator.SaveFormat.JPEG,
+      });
+      const stamp = new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 14);
+      const rand = Math.random().toString(36).slice(2, 8);
+      const filePath = `${userId}/${stamp}-${rand}.jpg`;
+      const base64 = await FileSystem.readAsStringAsync(manipulated.uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      const { error } = await supabase.storage
+        .from('catch-photos')
+        .upload(filePath, decode(base64), { contentType: 'image/jpeg', cacheControl: '3600', upsert: false });
+      if (error) throw error;
+      return filePath;
+    },
+    [],
+  );
 
   const handleFinish = useCallback(async () => {
     if (!session?.user?.id || catches.length === 0) {
@@ -247,42 +166,49 @@ export default function ImportCatchesStep() {
       return;
     }
     setLoading(true);
-    for (const entry of catches) {
-      try {
-        // Upload photo séparément : si ça échoue, la prise est quand même sauvegardée sans photo
-        let photoPath: string | null = null;
-        if (entry.photo) {
-          try {
-            photoPath = await uploadCatchPhoto(entry.photo, session.user.id);
-          } catch (uploadErr) {
-            console.warn('Import: photo upload failed, saving catch without photo', uploadErr);
+
+    // Toutes les prises en parallèle — on n'attend que l'insert principal
+    await Promise.all(
+      catches.map(async (entry) => {
+        try {
+          let photoPath: string | null = null;
+          if (entry.photo) {
+            try {
+              photoPath = await uploadCatchPhoto(entry.photo, session.user.id);
+            } catch {
+              console.warn('Import: photo upload failed, saving catch without photo');
+            }
           }
-        }
 
-        const { data: newCatch, error } = await supabase
-          .from('catches')
-          .insert({
-            user_id: session.user.id,
-            species: entry.species,
-            weight_kg: entry.poids ? parseFloat(entry.poids) : null,
-            length_cm: entry.taille ? parseFloat(entry.taille) : null,
-            region: entry.ville || null,
-            notes: entry.appat || null,
-            title: null,
-            photo_path: photoPath,
-            is_public: false,
-            description: null,
-            caught_at: new Date().toISOString(),
-          })
-          .select()
-          .single();
+          const { data: newCatch, error } = await supabase
+            .from('catches')
+            .insert({
+              user_id: session.user.id,
+              species: entry.species,
+              weight_kg: entry.poids ? parseFloat(entry.poids) : null,
+              length_cm: entry.taille ? parseFloat(entry.taille) : null,
+              region: entry.ville || null,
+              notes: entry.appat || null,
+              title: null,
+              photo_path: photoPath,
+              is_public: false,
+              description: null,
+              caught_at: new Date().toISOString(),
+            })
+            .select()
+            .single();
 
-        if (error) {
-          console.warn('Import: catches insert error', error.message, error);
-        } else if (newCatch) {
+          if (error) {
+            console.warn('Import: catches insert error', error.message);
+            return;
+          }
+          if (!newCatch) return;
+
           events.emit('catch:added', { species: entry.species, catchId: newCatch.id });
+
+          // Fire-and-forget : gamification et validation espèces ne bloquent pas l'utilisateur
           if (entry.isKnown) {
-            await awardCatchPoints({
+            awardCatchPoints({
               session,
               catchId: newCatch.id,
               species: entry.species,
@@ -290,29 +216,33 @@ export default function ImportCatchesStep() {
               firstForUser: true,
               isPublic: false,
               personalBest: false,
-            });
+            }).catch((e) => console.warn('awardCatchPoints failed:', e));
           } else {
-            await supabase.from('pending_species').insert({
-              user_id: session.user.id,
-              name: entry.species,
-              statut: 'pending',
-              notes: `catch=${newCatch.id}`,
-              update_at: new Date().toISOString(),
-            });
+            supabase
+              .from('pending_species')
+              .insert({
+                user_id: session.user.id,
+                name: entry.species,
+                statut: 'pending',
+                notes: `catch=${newCatch.id}`,
+                update_at: new Date().toISOString(),
+              })
+              .then(({ error: e }) => { if (e) console.warn('pending_species insert failed:', e.message); });
           }
+        } catch (e) {
+          console.warn('Import catch error:', e);
         }
-      } catch (e) {
-        console.warn('Import catch error:', e);
-      }
-    }
+      }),
+    );
+
     setLoading(false);
     exit();
   }, [session, catches, exit, uploadCatchPhoto]);
 
-  // ─── PHASE CHOIX ────────────────────────────────────────────────────────────
+  // ─── PHASE CHOIX ──────────────────────────────────────────────────────────────
   if (phase === 'choice') {
     return (
-      <ThemedSafeArea edges={['top', 'bottom']} style={{ backgroundColor: '#ffffff' }}>
+      <ThemedSafeArea edges={['top']} style={{ backgroundColor: '#ffffff' }}>
         <View style={styles.wrapper}>
           <View style={styles.topAccent}>
             <LinearGradient
@@ -325,7 +255,7 @@ export default function ImportCatchesStep() {
 
           <ScrollView
             style={styles.scrollView}
-            contentContainerStyle={styles.choiceContent}
+            contentContainerStyle={[styles.choiceContent, { paddingBottom: insets.bottom + 40 }]}
             showsVerticalScrollIndicator={false}
           >
             <View style={styles.header}>
@@ -338,12 +268,9 @@ export default function ImportCatchesStep() {
                     style={styles.progressFillFull}
                   />
                 </View>
-                <Text style={styles.progressDone}>✓</Text>
+                <Text style={styles.progressText}>✓</Text>
               </View>
 
-              <View style={styles.emojiWrap}>
-                <Text style={styles.bigEmoji}>🎣</Text>
-              </View>
               <Text style={styles.title}>Tes prises passées</Text>
               <Text style={styles.subtitle}>
                 Tu pêches déjà ? Importe tes anciennes captures pour démarrer ton FishDex avec une longueur d'avance.
@@ -351,26 +278,17 @@ export default function ImportCatchesStep() {
             </View>
 
             <View style={styles.cards}>
-              {/* Carte principale — importer */}
-              <Pressable onPress={() => setPhase('import')}>
-                <LinearGradient
-                  colors={['#1E3A5F', '#0F2744']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.primaryCard}
-                >
-                  <Text style={styles.cardEmoji}>📋</Text>
-                  <View style={styles.cardBody}>
-                    <Text style={styles.primaryCardTitle}>Importer mes prises</Text>
-                    <Text style={styles.primaryCardSub}>
-                      Renseigne tes captures passées et débloque des espèces dans ton FishDex
-                    </Text>
-                  </View>
-                  <Text style={styles.cardChevron}>›</Text>
-                </LinearGradient>
+              <Pressable style={styles.primaryCard} onPress={() => setPhase('import')}>
+                <Text style={styles.cardEmoji}>📋</Text>
+                <View style={styles.cardBody}>
+                  <Text style={styles.primaryCardTitle}>Importer mes prises</Text>
+                  <Text style={styles.primaryCardSub}>
+                    Renseigne tes captures passées et débloque des espèces dans ton FishDex
+                  </Text>
+                </View>
+                <Text style={styles.primaryChevron}>›</Text>
               </Pressable>
 
-              {/* Carte secondaire — passer */}
               <Pressable style={styles.secondaryCard} onPress={exit}>
                 <Text style={styles.cardEmoji}>🚀</Text>
                 <View style={styles.cardBody}>
@@ -386,9 +304,9 @@ export default function ImportCatchesStep() {
     );
   }
 
-  // ─── PHASE IMPORT ────────────────────────────────────────────────────────────
+  // ─── PHASE IMPORT ─────────────────────────────────────────────────────────────
   return (
-    <ThemedSafeArea edges={['top', 'bottom']} style={{ backgroundColor: '#ffffff' }}>
+    <ThemedSafeArea edges={['top']} style={{ backgroundColor: '#ffffff' }}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}
@@ -403,39 +321,45 @@ export default function ImportCatchesStep() {
             />
           </View>
 
-          {/* En-tête import */}
+          {/* En-tête */}
           <View style={styles.importHeader}>
             <Pressable onPress={() => setPhase('choice')} style={styles.backBtn}>
               <Text style={styles.backBtnText}>‹</Text>
             </Pressable>
-            <Text style={styles.importTitle}>Sélectionne tes espèces</Text>
-            {catches.length > 0 && (
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>{catches.length}</Text>
-              </View>
-            )}
+            <View style={styles.importTitleRow}>
+              <Text style={styles.importTitle}>Sélectionne tes espèces</Text>
+              {catches.length > 0 && (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>{catches.length}</Text>
+                </View>
+              )}
+            </View>
           </View>
 
           {/* Recherche */}
-          <View style={styles.searchRow}>
-            <Text style={styles.searchIcon}>🔍</Text>
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Rechercher une espèce..."
-              placeholderTextColor="#94A3B8"
-              value={query}
-              onChangeText={setQuery}
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-            {query.length > 0 && (
-              <Pressable onPress={() => setQuery('')} hitSlop={8}>
-                <Text style={styles.clearIcon}>✕</Text>
-              </Pressable>
-            )}
+          <View style={styles.searchWrap}>
+            <View style={[styles.searchRow, searchFocused && styles.searchRowFocused]}>
+              <Ionicons name="search" size={17} color={searchFocused ? '#3B82F6' : '#94A3B8'} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Rechercher une espèce..."
+                placeholderTextColor="#94A3B8"
+                value={query}
+                onChangeText={setQuery}
+                onFocus={() => setSearchFocused(true)}
+                onBlur={() => setSearchFocused(false)}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              {query.length > 0 && (
+                <Pressable onPress={() => setQuery('')} hitSlop={8}>
+                  <Ionicons name="close-circle" size={18} color="#94A3B8" />
+                </Pressable>
+              )}
+            </View>
           </View>
 
-          {/* Chips des prises ajoutées */}
+          {/* Chips */}
           {catches.length > 0 && (
             <ScrollView
               horizontal
@@ -445,33 +369,41 @@ export default function ImportCatchesStep() {
             >
               {catches.map((c) => (
                 <View key={c.id} style={styles.chip}>
-                  {c.photo && <Ionicons name="image" size={12} color="#93C5FD" />}
+                  {c.photo && <Ionicons name="image" size={12} color="#3B82F6" />}
                   <Text style={styles.chipText} numberOfLines={1}>{c.species}</Text>
-                  <Pressable onPress={() => removeCatch(c.id)} hitSlop={6} style={styles.chipRemove}>
-                    <Text style={styles.chipRemoveText}>✕</Text>
+                  <Pressable onPress={() => removeCatch(c.id)} hitSlop={6}>
+                    <Ionicons name="close" size={13} color="#94A3B8" />
                   </Pressable>
                 </View>
               ))}
             </ScrollView>
           )}
 
-          {/* Liste des espèces */}
+          {/* Liste */}
           <FlatList
             data={filteredSpecies}
             keyExtractor={(item) => item}
             style={styles.list}
             keyboardShouldPersistTaps="handled"
             ListEmptyComponent={
-              <View style={styles.emptyWrap}>
-                <Text style={styles.emptyText}>Aucune espèce trouvée pour "{query}"</Text>
-                <Text style={styles.emptyHint}>Elle sera ajoutée en tant qu'espèce inconnue</Text>
-              </View>
+              query.trim() ? (
+                <View style={styles.emptyWrap}>
+                  <Text style={styles.emptyText}>Aucune espèce trouvée pour "{query}"</Text>
+                  <Pressable style={styles.addCustomBtnWrap} onPress={() => openModal(query.trim())}>
+                    <View style={styles.addCustomBtn}>
+                      <Ionicons name="add" size={18} color="#ffffff" />
+                      <Text style={styles.addCustomText}>Ajouter "{query.trim()}"</Text>
+                    </View>
+                  </Pressable>
+                  <Text style={styles.emptyHint}>Sera soumise pour vérification</Text>
+                </View>
+              ) : null
             }
             renderItem={({ item }) => (
               <Pressable style={styles.speciesRow} onPress={() => openModal(item)}>
                 <Text style={styles.speciesName}>{item}</Text>
                 <View style={styles.addCircle}>
-                  <Text style={styles.addIcon}>+</Text>
+                  <Ionicons name="add" size={18} color="#1E293B" />
                 </View>
               </Pressable>
             )}
@@ -479,31 +411,24 @@ export default function ImportCatchesStep() {
           />
 
           {/* Footer */}
-          <View style={styles.footer}>
+          <View style={[styles.footer, { paddingBottom: insets.bottom + 12 }]}>
             <Pressable
               style={[styles.finishBtn, loading && styles.disabled]}
               onPress={handleFinish}
               disabled={loading}
             >
-              <LinearGradient
-                colors={['#1E3A5F', '#0F2744']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.finishGradient}
-              >
-                <Text style={styles.finishText}>
-                  {loading
-                    ? 'Import en cours...'
-                    : catches.length > 0
-                    ? `Terminer l'import · ${catches.length} prise${catches.length > 1 ? 's' : ''}`
-                    : 'Passer cette étape'}
-                </Text>
-              </LinearGradient>
+              <Text style={styles.finishText}>
+                {loading
+                  ? 'Import en cours...'
+                  : catches.length > 0
+                  ? `Terminer · ${catches.length} prise${catches.length > 1 ? 's' : ''}`
+                  : 'Passer cette étape'}
+              </Text>
             </Pressable>
           </View>
         </View>
 
-        {/* Modal saisie détails d'une prise */}
+        {/* Modal détails d'une prise */}
         <Modal
           visible={modalVisible}
           transparent
@@ -515,7 +440,7 @@ export default function ImportCatchesStep() {
             style={styles.overlay}
           >
             <Pressable style={StyleSheet.absoluteFill} onPress={() => setModalVisible(false)} />
-            <View style={styles.sheet}>
+            <View style={[styles.sheet, { paddingBottom: insets.bottom }]}>
               <ScrollView
                 keyboardShouldPersistTaps="handled"
                 showsVerticalScrollIndicator={false}
@@ -531,65 +456,114 @@ export default function ImportCatchesStep() {
 
                 <View style={styles.row}>
                   <View style={styles.half}>
-                    <Text style={styles.label}>Taille (cm)</Text>
-                    <TextInput
-                      style={styles.input}
-                      placeholder="ex : 45"
-                      placeholderTextColor="#94A3B8"
-                      value={formTaille}
-                      onChangeText={setFormTaille}
-                      keyboardType="decimal-pad"
-                    />
+                    <Text style={styles.label}>
+                      Taille (cm) <Text style={styles.required}>*</Text>
+                    </Text>
+                    <View
+                      style={[
+                        styles.inputContainer,
+                        tailleFocused && styles.inputContainerFocused,
+                        formErrors.taille && styles.inputContainerError,
+                      ]}
+                    >
+                      <TextInput
+                        style={styles.input}
+                        placeholder="ex : 45"
+                        placeholderTextColor="#94A3B8"
+                        value={formTaille}
+                        onChangeText={(v) => {
+                          setFormTaille(v);
+                          if (formErrors.taille) setFormErrors((e) => ({ ...e, taille: false }));
+                        }}
+                        onFocus={() => setTailleFocused(true)}
+                        onBlur={() => setTailleFocused(false)}
+                        keyboardType="decimal-pad"
+                      />
+                    </View>
+                    {formErrors.taille && <Text style={styles.errorText}>Champ obligatoire</Text>}
                   </View>
                   <View style={styles.half}>
-                    <Text style={styles.label}>Poids (kg)</Text>
+                    <Text style={styles.label}>
+                      Poids (kg) <Text style={styles.required}>*</Text>
+                    </Text>
+                    <View
+                      style={[
+                        styles.inputContainer,
+                        poidsFocused && styles.inputContainerFocused,
+                        formErrors.poids && styles.inputContainerError,
+                      ]}
+                    >
+                      <TextInput
+                        style={styles.input}
+                        placeholder="ex : 2.5"
+                        placeholderTextColor="#94A3B8"
+                        value={formPoids}
+                        onChangeText={(v) => {
+                          setFormPoids(v);
+                          if (formErrors.poids) setFormErrors((e) => ({ ...e, poids: false }));
+                        }}
+                        onFocus={() => setPoidsFocused(true)}
+                        onBlur={() => setPoidsFocused(false)}
+                        keyboardType="decimal-pad"
+                      />
+                    </View>
+                    {formErrors.poids && <Text style={styles.errorText}>Champ obligatoire</Text>}
+                  </View>
+                </View>
+
+                <View style={styles.fieldGroup}>
+                  <Text style={styles.label}>
+                    Lieu de pêche <Text style={styles.required}>*</Text>
+                  </Text>
+                  <View
+                    style={[
+                      styles.inputContainer,
+                      villeFocused && styles.inputContainerFocused,
+                      formErrors.ville && styles.inputContainerError,
+                    ]}
+                  >
                     <TextInput
                       style={styles.input}
-                      placeholder="ex : 2.5"
+                      placeholder="ex : La Rochelle"
                       placeholderTextColor="#94A3B8"
-                      value={formPoids}
-                      onChangeText={setFormPoids}
-                      keyboardType="decimal-pad"
+                      value={formVille}
+                      onChangeText={(v) => {
+                        setFormVille(v);
+                        if (formErrors.ville) setFormErrors((e) => ({ ...e, ville: false }));
+                      }}
+                      onFocus={() => setVilleFocused(true)}
+                      onBlur={() => setVilleFocused(false)}
+                    />
+                  </View>
+                  {formErrors.ville && <Text style={styles.errorText}>Champ obligatoire</Text>}
+                </View>
+
+                <View style={styles.fieldGroup}>
+                  <Text style={styles.label}>
+                    Appâts / Leurre <Text style={styles.optional}>(optionnel)</Text>
+                  </Text>
+                  <View style={[styles.inputContainer, appatFocused && styles.inputContainerFocused]}>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="ex : Vers, cuillère argentée..."
+                      placeholderTextColor="#94A3B8"
+                      value={formAppat}
+                      onChangeText={setFormAppat}
+                      onFocus={() => setAppatFocused(true)}
+                      onBlur={() => setAppatFocused(false)}
                     />
                   </View>
                 </View>
 
                 <View style={styles.fieldGroup}>
-                  <Text style={styles.label}>Ville / Lieu de pêche</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="ex : La Rochelle"
-                    placeholderTextColor="#94A3B8"
-                    value={formVille}
-                    onChangeText={setFormVille}
-                  />
-                </View>
-
-                <View style={styles.fieldGroup}>
                   <Text style={styles.label}>
-                    Appâts utilisés{' '}
-                    <Text style={styles.optional}>(optionnel)</Text>
-                  </Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="ex : Vers, cuillère argentée..."
-                    placeholderTextColor="#94A3B8"
-                    value={formAppat}
-                    onChangeText={setFormAppat}
-                  />
-                </View>
-
-                {/* Photo */}
-                <View style={styles.fieldGroup}>
-                  <Text style={styles.label}>
-                    Photo{' '}
-                    <Text style={styles.optional}>(optionnel)</Text>
+                    Photo <Text style={styles.optional}>(optionnel)</Text>
                   </Text>
                   {formPhoto ? (
                     <View style={styles.photoPreviewWrap}>
                       <Image source={{ uri: formPhoto.uri }} style={styles.photoPreview} contentFit="cover" />
                       <Pressable style={styles.photoRemove} onPress={() => setFormPhoto(null)} hitSlop={8}>
-                        <Ionicons name="close-circle" size={22} color="#fff" />
+                        <Ionicons name="close-circle" size={24} color="#fff" />
                       </Pressable>
                     </View>
                   ) : (
@@ -601,18 +575,18 @@ export default function ImportCatchesStep() {
                 </View>
 
                 <View style={styles.modalBtns}>
-                  <Pressable style={styles.cancelBtn} onPress={() => setModalVisible(false)}>
-                    <Text style={styles.cancelText}>Annuler</Text>
+                  <Pressable
+                    style={styles.cancelBtnWrap}
+                    onPress={() => setModalVisible(false)}
+                  >
+                    <View style={styles.cancelBtn}>
+                      <Text style={styles.cancelText}>Annuler</Text>
+                    </View>
                   </Pressable>
                   <Pressable style={styles.addBtnWrap} onPress={addCatch}>
-                    <LinearGradient
-                      colors={['#1E3A5F', '#0F2744']}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
-                      style={styles.addGradient}
-                    >
-                      <Text style={styles.addText}>Ajouter cette prise</Text>
-                    </LinearGradient>
+                    <View style={styles.addBtn}>
+                      <Text style={styles.addBtnText}>Ajouter cette prise</Text>
+                    </View>
                   </Pressable>
                 </View>
               </ScrollView>
@@ -630,14 +604,8 @@ const styles = StyleSheet.create({
   accentBar: { flex: 1 },
   scrollView: { flex: 1 },
 
-  // ── Phase choix ──────────────────────────────────────────────
-  choiceContent: {
-    paddingHorizontal: 24,
-    paddingTop: 24,
-    paddingBottom: 40,
-    gap: 28,
-  },
-  header: { gap: 16 },
+  // ── Header commun ────────────────────────────────────────────
+  header: { gap: 14 },
   progressContainer: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   progressBar: {
     flex: 1,
@@ -647,9 +615,13 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   progressFillFull: { width: '100%', height: '100%' },
-  progressDone: { fontSize: 13, fontWeight: '700', color: '#1E3A5F', minWidth: 20 },
-  emojiWrap: { alignItems: 'center', paddingVertical: 8 },
-  bigEmoji: { fontSize: 56 },
+  progressText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#64748B',
+    minWidth: 24,
+    textAlign: 'right',
+  },
   title: {
     fontSize: 28,
     fontWeight: '800',
@@ -658,19 +630,27 @@ const styles = StyleSheet.create({
     lineHeight: 34,
   },
   subtitle: { color: '#64748B', fontSize: 15, lineHeight: 22 },
-  cards: { gap: 14 },
+
+  // ── Phase choix ───────────────────────────────────────────────
+  choiceContent: {
+    paddingHorizontal: 24,
+    paddingTop: 24,
+    gap: 28,
+  },
+  cards: { gap: 12 },
   primaryCard: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
     padding: 20,
     borderRadius: 20,
+    backgroundColor: '#0f172a',
   },
   cardEmoji: { fontSize: 28 },
   cardBody: { flex: 1, gap: 4 },
   primaryCardTitle: { color: '#ffffff', fontWeight: '800', fontSize: 17 },
-  primaryCardSub: { color: 'rgba(255,255,255,0.72)', fontSize: 13, lineHeight: 18 },
-  cardChevron: { color: '#ffffff', fontSize: 28, fontWeight: '300', opacity: 0.7 },
+  primaryCardSub: { color: 'rgba(255,255,255,0.65)', fontSize: 13, lineHeight: 18 },
+  primaryChevron: { color: '#ffffff', fontSize: 28, fontWeight: '300', opacity: 0.6 },
   secondaryCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -685,60 +665,66 @@ const styles = StyleSheet.create({
   secondaryCardSub: { color: '#64748B', fontSize: 13, lineHeight: 18 },
   secondaryChevron: { color: '#94A3B8', fontSize: 28, fontWeight: '300' },
 
-  // ── Phase import ─────────────────────────────────────────────
+  // ── Phase import ──────────────────────────────────────────────
   importHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     paddingTop: 18,
-    paddingBottom: 12,
-    gap: 10,
+    paddingBottom: 10,
+    gap: 12,
   },
   backBtn: {
     width: 36,
     height: 36,
     borderRadius: 10,
-    backgroundColor: '#F1F5F9',
+    backgroundColor: '#F8FAFC',
+    borderWidth: 2,
+    borderColor: '#E2E8F0',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  backBtnText: { fontSize: 22, color: '#1E3A5F', fontWeight: '600', lineHeight: 26 },
-  importTitle: { flex: 1, fontSize: 18, fontWeight: '800', color: '#0f172a' },
+  backBtnText: { fontSize: 22, color: '#1E293B', fontWeight: '600', lineHeight: 26 },
+  importTitleRow: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  importTitle: { fontSize: 20, fontWeight: '800', color: '#0f172a', letterSpacing: -0.2 },
   badge: {
-    backgroundColor: '#1E3A5F',
+    backgroundColor: '#0f172a',
     borderRadius: 12,
     minWidth: 24,
     height: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 6,
+    paddingHorizontal: 7,
   },
   badgeText: { color: '#ffffff', fontSize: 12, fontWeight: '800' },
 
+  searchWrap: { paddingHorizontal: 20, paddingBottom: 8 },
   searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginHorizontal: 16,
-    marginBottom: 8,
     backgroundColor: '#F8FAFC',
     borderRadius: 14,
-    borderWidth: 1.5,
+    borderWidth: 2,
     borderColor: '#E2E8F0',
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingVertical: 12,
     gap: 10,
   },
-  searchIcon: { fontSize: 16 },
-  searchInput: { flex: 1, fontSize: 15, color: '#0f172a' },
-  clearIcon: { color: '#94A3B8', fontSize: 14, fontWeight: '600' },
+  searchRowFocused: {
+    borderColor: '#3B82F6',
+    backgroundColor: '#ffffff',
+  },
+  searchInput: { flex: 1, fontSize: 15, color: '#0f172a', fontWeight: '500' },
 
-  chipsScroll: { maxHeight: 48, marginBottom: 6 },
-  chipsContent: { paddingHorizontal: 16, gap: 8, alignItems: 'center' },
+  chipsScroll: { maxHeight: 46, marginBottom: 4 },
+  chipsContent: { paddingHorizontal: 20, gap: 8, alignItems: 'center' },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#EFF6FF',
     borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: '#BFDBFE',
     paddingVertical: 6,
     paddingLeft: 12,
     paddingRight: 8,
@@ -746,61 +732,75 @@ const styles = StyleSheet.create({
     maxWidth: 180,
   },
   chipText: { color: '#1E40AF', fontSize: 13, fontWeight: '600', flexShrink: 1 },
-  chipRemove: { padding: 2 },
-  chipRemoveText: { color: '#93C5FD', fontSize: 11, fontWeight: '700' },
 
-  list: { flex: 1, marginTop: 4 },
+  list: { flex: 1, marginTop: 2 },
   speciesRow: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 14,
-    justifyContent: 'space-between',
   },
   speciesName: { fontSize: 15, color: '#0f172a', fontWeight: '500', flex: 1 },
   addCircle: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     backgroundColor: '#F1F5F9',
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  addIcon: { fontSize: 18, color: '#1E3A5F', fontWeight: '700', lineHeight: 22 },
   sep: { height: 1, backgroundColor: '#F1F5F9', marginLeft: 20 },
-  emptyWrap: { padding: 32, alignItems: 'center', gap: 8 },
-  emptyText: { color: '#64748B', fontSize: 15, textAlign: 'center' },
-  emptyHint: { color: '#94A3B8', fontSize: 13, textAlign: 'center' },
+
+  emptyWrap: { paddingHorizontal: 24, paddingVertical: 32, alignItems: 'center', gap: 14 },
+  emptyText: { color: '#64748B', fontSize: 15, textAlign: 'center', fontWeight: '500' },
+  emptyHint: { color: '#94A3B8', fontSize: 12, textAlign: 'center' },
+  addCustomBtnWrap: { alignSelf: 'stretch' },
+  addCustomBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    backgroundColor: '#0f172a',
+    borderRadius: 14,
+  },
+  addCustomText: { color: '#ffffff', fontWeight: '700', fontSize: 15 },
 
   footer: {
-    paddingHorizontal: 20,
+    paddingHorizontal: 24,
     paddingTop: 12,
-    paddingBottom: 28,
     backgroundColor: '#ffffff',
     borderTopWidth: 1,
     borderTopColor: '#F1F5F9',
   },
-  finishBtn: { borderRadius: 16, overflow: 'hidden' },
-  finishGradient: { paddingVertical: 18, alignItems: 'center' },
-  finishText: { color: '#ffffff', fontWeight: '800', fontSize: 16 },
+  finishBtn: {
+    paddingVertical: 18,
+    backgroundColor: '#0f172a',
+    borderRadius: 16,
+    alignItems: 'center',
+  },
+  finishText: { color: '#ffffff', fontWeight: '800', fontSize: 17, letterSpacing: 0.3 },
   disabled: { opacity: 0.6 },
 
-  // ── Modal ────────────────────────────────────────────────────
+  // ── Modal ──────────────────────────────────────────────────────
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
+    backgroundColor: 'rgba(0,0,0,0.4)',
     justifyContent: 'flex-end',
   },
   sheet: {
     backgroundColor: '#ffffff',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
-    maxHeight: '90%',
+    maxHeight: '92%',
   },
   sheetContent: {
     paddingHorizontal: 24,
-    paddingBottom: Platform.OS === 'ios' ? 44 : 32,
-    gap: 20,
+    paddingBottom: 24,
+    gap: 18,
   },
   handle: {
     width: 40,
@@ -811,29 +811,45 @@ const styles = StyleSheet.create({
     marginTop: 12,
     marginBottom: 4,
   },
-  sheetHeader: { gap: 6 },
-  modalSpecies: { fontSize: 22, fontWeight: '800', color: '#0f172a' },
+  sheetHeader: { gap: 4 },
+  modalSpecies: { fontSize: 22, fontWeight: '800', color: '#0f172a', letterSpacing: -0.3 },
   modalSub: { fontSize: 14, color: '#64748B', lineHeight: 20 },
-  row: { flexDirection: 'row', gap: 14 },
-  half: { flex: 1, gap: 8 },
-  fieldGroup: { gap: 8 },
+
+  row: { flexDirection: 'row', gap: 12 },
+  half: { flex: 1, gap: 6 },
+  fieldGroup: { gap: 6 },
   label: { fontSize: 13, fontWeight: '700', color: '#374151' },
+  required: { color: '#EF4444', fontWeight: '700' },
   optional: { fontWeight: '400', color: '#94A3B8' },
-  input: {
-    borderWidth: 1.5,
-    borderColor: '#E2E8F0',
+  errorText: { fontSize: 11, color: '#EF4444', fontWeight: '500' },
+
+  inputContainer: {
+    backgroundColor: '#F8FAFC',
     borderRadius: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    borderWidth: 2,
+    borderColor: '#E2E8F0',
+  },
+  inputContainerFocused: {
+    borderColor: '#3B82F6',
+    backgroundColor: '#ffffff',
+  },
+  inputContainerError: {
+    borderColor: '#EF4444',
+    backgroundColor: '#FFF5F5',
+  },
+  input: {
+    paddingVertical: 13,
+    paddingHorizontal: 14,
     fontSize: 15,
     color: '#0f172a',
-    backgroundColor: '#F8FAFC',
+    fontWeight: '500',
   },
+
   photoPickerBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    borderWidth: 1.5,
+    borderWidth: 2,
     borderColor: '#E2E8F0',
     borderStyle: 'dashed',
     borderRadius: 14,
@@ -846,18 +862,27 @@ const styles = StyleSheet.create({
   photoPreview: { width: 100, height: 100, borderRadius: 12 },
   photoRemove: { position: 'absolute', top: -8, right: -8 },
 
-  modalBtns: { flexDirection: 'row', gap: 12, marginTop: 6 },
-  cancelBtn: {
+  modalBtns: { flexDirection: 'row', gap: 12, marginTop: 4 },
+  cancelBtnWrap: {
     flex: 1,
     borderRadius: 14,
-    borderWidth: 1.5,
+    overflow: 'hidden',
+    borderWidth: 2,
     borderColor: '#E2E8F0',
+  },
+  cancelBtn: {
     paddingVertical: 16,
     alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: '#F8FAFC',
   },
-  cancelText: { color: '#64748B', fontWeight: '700', fontSize: 15 },
-  addBtnWrap: { flex: 2, borderRadius: 14, overflow: 'hidden' },
-  addGradient: { paddingVertical: 16, alignItems: 'center' },
-  addText: { color: '#ffffff', fontWeight: '800', fontSize: 15 },
+  cancelText: { color: '#1E293B', fontWeight: '700', fontSize: 16 },
+  addBtnWrap: { flex: 2 },
+  addBtn: {
+    paddingVertical: 16,
+    alignItems: 'center',
+    backgroundColor: '#0f172a',
+    borderRadius: 14,
+  },
+  addBtnText: { color: '#ffffff', fontWeight: '800', fontSize: 16 },
 });

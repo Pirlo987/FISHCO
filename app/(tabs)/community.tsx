@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+  ActivityIndicator,
   Animated,
   FlatList,
   Pressable,
@@ -28,7 +29,9 @@ export default function CommunityScreen() {
   const {
     feed,
     loading,
+    loadingMore,
     refreshing,
+    hasMore,
     error,
     photoRatios,
     likesById,
@@ -38,6 +41,7 @@ export default function CommunityScreen() {
     commentOpen,
     commentsList,
     onRefresh,
+    loadMore,
     toggleLike,
     submitComment,
     onPhotoRatio,
@@ -200,6 +204,19 @@ export default function CommunityScreen() {
               tintColor="#2563EB"
               colors={['#2563EB']}
             />
+          }
+          onEndReached={loadMore}
+          onEndReachedThreshold={0.4}
+          ListFooterComponent={
+            loadingMore ? (
+              <View style={styles.footerLoader}>
+                <ActivityIndicator size="small" color="#2563EB" />
+              </View>
+            ) : !hasMore && feed.length > 0 ? (
+              <View style={styles.footerEnd}>
+                <Text style={styles.footerEndText}>Tu as tout vu 🎣</Text>
+              </View>
+            ) : null
           }
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={
@@ -377,6 +394,20 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   emptyBtnText: { color: '#FFFFFF', fontWeight: '700', fontSize: 15 },
+
+  footerLoader: {
+    paddingVertical: 24,
+    alignItems: 'center',
+  },
+  footerEnd: {
+    paddingVertical: 24,
+    alignItems: 'center',
+  },
+  footerEndText: {
+    fontSize: 13,
+    color: '#94A3B8',
+    fontWeight: '500',
+  },
 
   errorBox: {
     flexDirection: 'row',

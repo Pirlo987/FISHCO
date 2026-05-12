@@ -1,6 +1,7 @@
 // Reanimated must be imported at the very top before any other imports
 // to avoid Hermes native crashes on initialization.
 import 'react-native-reanimated';
+import { initSentry } from '@/lib/sentry';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
 import { Stack, usePathname, useRouter, useSegments } from 'expo-router';
@@ -187,7 +188,7 @@ function AuthGate({
   return <>{children}</>;
 }
 
-export default function RootLayout() {
+function RootLayout() {
   const colorScheme = useColorScheme();
   const [loaded] = useFonts({
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
@@ -282,3 +283,5 @@ const loadingStyles = StyleSheet.create({
     marginTop: 8,
   },
 });
+
+export default RootLayout;

@@ -161,18 +161,21 @@ export default function ProfileSettingsScreen() {
       .select('country,level,phone,dob,avatar_url,avatar_path')
       .eq('id', session.user.id)
       .maybeSingle()
-      .then(({ data, error }) => {
-        if (cancelled) return;
-        if (error) throw error;
-        const row = (data ?? null) as ProfileRow | null;
-        setProfile(row);
-        setForm(row);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setError(err?.message ? String(err.message) : t('settings_error_load'));
-      })
-      .finally(() => { if (!cancelled) setLoading(false); });
+      .then(
+        ({ data, error }) => {
+          if (cancelled) return;
+          if (error) { setError(error?.message ? String(error.message) : t('settings_error_load')); setLoading(false); return; }
+          const row = (data ?? null) as ProfileRow | null;
+          setProfile(row);
+          setForm(row);
+          setLoading(false);
+        },
+        (err: any) => {
+          if (cancelled) return;
+          setError(err?.message ? String(err.message) : t('settings_error_load'));
+          setLoading(false);
+        },
+      );
     return () => { cancelled = true; };
   }, [session?.user?.id]);
 
@@ -331,11 +334,8 @@ export default function ProfileSettingsScreen() {
           onPress: async () => {
             if (!session?.user?.id) return;
             try {
-              const uid = session.user.id;
-              await supabase.from('likes').delete().eq('user_id', uid);
-              await supabase.from('profile_points').delete().eq('user_id', uid);
-              await supabase.from('catches').delete().eq('user_id', uid);
-              await supabase.from('profiles').delete().eq('id', uid);
+              const { error } = await supabase.functions.invoke('delete-account');
+              if (error) throw error;
               router.replace('/onboarding');
               await signOut();
             } catch (e: any) {

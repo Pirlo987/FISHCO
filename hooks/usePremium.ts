@@ -22,14 +22,14 @@ export function usePremium() {
       .select('is_premium')
       .eq('id', session.user.id)
       .maybeSingle()
-      .then(({ data }) => setDbIsPremium(data?.is_premium ?? false))
-      .catch(() => setDbIsPremium(null));
+      .then(
+        ({ data }) => setDbIsPremium(data?.is_premium ?? false),
+        () => setDbIsPremium(null),
+      );
   }, [session?.user?.id]);
 
   // Source principale : RevenueCat (temps réel + cache local)
   React.useEffect(() => {
-    let listener: { remove: () => void } | null = null;
-
     Purchases.getCustomerInfo()
       .then((info) => { setIsError(false); setCustomerInfo(info); })
       .catch(() => { setIsError(true); setCustomerInfo(null); })
@@ -37,7 +37,7 @@ export function usePremium() {
 
     try {
       // Écoute les changements en temps réel (achat, résiliation, restore)
-      listener = Purchases.addCustomerInfoUpdateListener((info) => {
+      Purchases.addCustomerInfoUpdateListener((info) => {
         setIsError(false);
         setCustomerInfo(info);
       });
@@ -45,10 +45,6 @@ export function usePremium() {
       // Native module non disponible (Expo Go)
       setIsLoading(false);
     }
-
-    return () => {
-      listener?.remove();
-    };
   }, []);
 
   // RevenueCat est la source de vérité.

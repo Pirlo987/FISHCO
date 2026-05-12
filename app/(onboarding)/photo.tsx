@@ -115,7 +115,7 @@ export default function PhotoStep() {
       return;
     }
     const draft = await readProfileDraft(session);
-    const d = draft ?? {};
+    const d: Partial<Awaited<ReturnType<typeof readProfileDraft>>> & Record<string, any> = draft ?? {};
     const payload: any = {
       id: session.user.id,
       first_name: d.firstName ?? null,

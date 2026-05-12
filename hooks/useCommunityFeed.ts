@@ -6,15 +6,22 @@ import type { FeedItem, CommentRow } from '@/components/community/types';
 
 const URL_REGEX = /https?:\/\/|www\./i;
 export const MAX_COMMENT_LENGTH = 500;
+const PAGE_SIZE = 12;
 
+const FEED_SELECT =
+  'id,user_id,title,species,weight_kg,length_cm,region,description,photo_path,caught_at,catch_likes(count),catch_comments(count),profiles:profiles (id,username,first_name,last_name,avatar_url,avatar_path,photo_url,photo_path)';
 
 export function useCommunityFeed() {
   const { session } = useAuth();
 
   const [feed, setFeed] = useState<FeedItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [offset, setOffset] = useState(0);
   const [error, setError] = useState<string | null>(null);
+
   const [photoRatios, setPhotoRatios] = useState<Record<string, number>>({});
   const [likesById, setLikesById] = useState<Record<string, number>>({});
   const [commentsById, setCommentsById] = useState<Record<string, number>>({});
@@ -40,6 +47,8 @@ export function useCommunityFeed() {
     }
     return map;
   }, [feed]);
+
+  // ── Chargements secondaires (seulement pour le nouveau batch) ──
 
   const loadComments = useCallback(async (ids: string[]) => {
     if (!ids.length) return {} as Record<string, CommentRow[]>;
@@ -98,6 +107,113 @@ export function useCommunityFeed() {
     [session?.user?.id],
   );
 
+  // ── Merge helper pour les données secondaires d'un batch ──
+
+  const mergeSecondaryData = useCallback(
+    async (rows: FeedItem[], replace: boolean) => {
+      const newLikes: Record<string, number> = {};
+      const newComments: Record<string, number> = {};
+      for (const row of rows) {
+        newLikes[row.id] = row.catch_likes?.[0]?.count ?? 0;
+        newComments[row.id] = row.catch_comments?.[0]?.count ?? 0;
+      }
+
+      const ids = rows.map((r) => r.id);
+      const [commentMap, likedMap, savedMap] = await Promise.all([
+        loadComments(ids),
+        loadMyLikes(ids),
+        loadMySaves(ids),
+      ]);
+
+      if (replace) {
+        setLikesById(newLikes);
+        setCommentsById(newComments);
+        setCommentsList(commentMap);
+        setLikedByMe(likedMap);
+        setSavedByMe(savedMap);
+      } else {
+        setLikesById((prev) => ({ ...prev, ...newLikes }));
+        setCommentsById((prev) => ({ ...prev, ...newComments }));
+        setCommentsList((prev) => ({ ...prev, ...commentMap }));
+        setLikedByMe((prev) => ({ ...prev, ...likedMap }));
+        setSavedByMe((prev) => ({ ...prev, ...savedMap }));
+      }
+    },
+    [loadComments, loadMyLikes, loadMySaves],
+  );
+
+  // ── Première page (reset complet) ──
+
+  const fetchFeed = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { data, error: dbError } = await supabase
+        .from('catches')
+        .select(FEED_SELECT)
+        .eq('is_public', true)
+        .eq('status', 'active')
+        .order('caught_at', { ascending: false })
+        .range(0, PAGE_SIZE - 1);
+
+      if (dbError) throw dbError;
+      const rows = (data as unknown as FeedItem[]) ?? [];
+      setFeed(rows);
+      setOffset(rows.length);
+      setHasMore(rows.length === PAGE_SIZE);
+
+      await mergeSecondaryData(rows, true);
+    } catch (e: any) {
+      setError(e?.message ?? 'Flux indisponible');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [mergeSecondaryData]);
+
+  // ── Page suivante (append) ──
+
+  const loadMore = useCallback(async () => {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    try {
+      const { data, error: dbError } = await supabase
+        .from('catches')
+        .select(FEED_SELECT)
+        .eq('is_public', true)
+        .eq('status', 'active')
+        .order('caught_at', { ascending: false })
+        .range(offset, offset + PAGE_SIZE - 1);
+
+      if (dbError) throw dbError;
+      const rows = (data as unknown as FeedItem[]) ?? [];
+      if (!rows.length) {
+        setHasMore(false);
+        return;
+      }
+      setFeed((prev) => [...prev, ...rows]);
+      setOffset((prev) => prev + rows.length);
+      setHasMore(rows.length === PAGE_SIZE);
+
+      await mergeSecondaryData(rows, false);
+    } catch (e: any) {
+      console.warn('loadMore failed:', e?.message);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [loadingMore, hasMore, offset, mergeSecondaryData]);
+
+  useEffect(() => {
+    fetchFeed();
+  }, [fetchFeed]);
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    fetchFeed();
+  }, [fetchFeed]);
+
+  // ── Interactions ──
+
   const toggleSave = useCallback(
     async (catchId: string) => {
       if (!session?.user?.id) return;
@@ -117,59 +233,6 @@ export function useCommunityFeed() {
     },
     [savedByMe, session?.user?.id],
   );
-
-  const fetchFeed = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const { data, error: dbError } = await supabase
-        .from('catches')
-        .select(
-          'id,user_id,title,species,weight_kg,length_cm,region,description,photo_path,caught_at,catch_likes(count),catch_comments(count),profiles:profiles (id,username,first_name,last_name,avatar_url,avatar_path,photo_url,photo_path)',
-        )
-        .eq('is_public', true)
-        .eq('status', 'active')
-        .order('caught_at', { ascending: false })
-        .limit(50);
-
-      if (dbError) throw dbError;
-      const rows = (data as unknown as FeedItem[]) ?? [];
-      setFeed(rows);
-
-      const nextLikes: Record<string, number> = {};
-      const nextComments: Record<string, number> = {};
-      for (const row of rows) {
-        nextLikes[row.id] = row.catch_likes?.[0]?.count ?? 0;
-        nextComments[row.id] = row.catch_comments?.[0]?.count ?? 0;
-      }
-      setLikesById(nextLikes);
-      setCommentsById(nextComments);
-
-      const ids = rows.map((r) => r.id);
-      const [commentMap, likedMap, savedMap] = await Promise.all([
-        loadComments(ids),
-        loadMyLikes(ids),
-        loadMySaves(ids),
-      ]);
-      setCommentsList(commentMap);
-      setLikedByMe(likedMap);
-      setSavedByMe(savedMap);
-    } catch (e: any) {
-      setError(e?.message ?? 'Flux indisponible');
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [loadComments, loadMyLikes, loadMySaves]);
-
-  useEffect(() => {
-    fetchFeed();
-  }, [fetchFeed]);
-
-  const onRefresh = useCallback(() => {
-    setRefreshing(true);
-    fetchFeed();
-  }, [fetchFeed]);
 
   const toggleLike = useCallback(
     async (catchId: string) => {
@@ -221,10 +284,7 @@ export function useCommunityFeed() {
           list.unshift(data as unknown as CommentRow);
           return { ...prev, [catchId]: list.slice(0, 3) };
         });
-        setCommentsById((prev) => ({
-          ...prev,
-          [catchId]: (prev[catchId] ?? 0) + 1,
-        }));
+        setCommentsById((prev) => ({ ...prev, [catchId]: (prev[catchId] ?? 0) + 1 }));
       }
     },
     [commentDrafts, session?.user?.id],
@@ -287,7 +347,9 @@ export function useCommunityFeed() {
   return {
     feed: visibleFeed,
     loading,
+    loadingMore,
     refreshing,
+    hasMore,
     error,
     photoRatios,
     likesById,
@@ -297,6 +359,7 @@ export function useCommunityFeed() {
     commentOpen,
     commentsList,
     onRefresh,
+    loadMore,
     toggleLike,
     submitComment,
     onPhotoRatio,

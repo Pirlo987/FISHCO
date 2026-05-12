@@ -137,7 +137,7 @@ export default function CatchDetailScreen() {
                 </View>
               )}
             </Pressable>
-            <Pressable onPress={() => router.back()} style={[styles.backBtn, { top: 12 + insets.top }]} hitSlop={10}>
+            <Pressable onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)')} style={[styles.backBtn, { top: 12 + insets.top }]} hitSlop={10}>
               <Ionicons name="chevron-back" size={26} color="#000" />
             </Pressable>
           </View>

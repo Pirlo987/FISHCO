@@ -56,8 +56,8 @@ export default function AboutScreen() {
                   onPress: async () => {
                     if (!session?.user?.id) return;
                     try {
-                      await supabase.from('catches').delete().eq('user_id', session.user.id);
-                      await supabase.from('profiles').delete().eq('id', session.user.id);
+                      const { error } = await supabase.functions.invoke('delete-account');
+                      if (error) throw error;
                       router.replace('/onboarding');
                       await signOut();
                     } catch (e: any) {

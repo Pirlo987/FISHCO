@@ -358,7 +358,7 @@ export default function SpeciesDetailScreen() {
                   </View>
                 )}
                 <Pressable
-                  onPress={() => router.back()}
+                  onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)')}
                   style={[styles.backBtn, { top: 12 + insets.top }]}
                   hitSlop={10}
                 >

@@ -90,6 +90,18 @@ export default function ResetPasswordScreen() {
       setPasswordError(t('reset_error_short'));
       return;
     }
+    if (!/[A-Z]/.test(password)) {
+      setPasswordError(t('auth_error_password_uppercase'));
+      return;
+    }
+    if (!/[0-9]/.test(password)) {
+      setPasswordError(t('auth_error_password_number'));
+      return;
+    }
+    if (!/[^A-Za-z0-9]/.test(password)) {
+      setPasswordError(t('auth_error_password_special'));
+      return;
+    }
     if (password !== confirm) {
       setPasswordError(t('reset_error_mismatch'));
       return;
