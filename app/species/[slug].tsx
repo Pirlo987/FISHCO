@@ -368,40 +368,61 @@ export default function SpeciesDetailScreen() {
             }
           >
             {/* Titre */}
-            <View style={styles.titleRow}>
+            <View style={styles.titleSection}>
               <ThemedText type="title" style={styles.titleText}>{displayName}</ThemedText>
               {!!sciName && <Text style={styles.latinName}>{String(sciName)}</Text>}
             </View>
 
-            {/* Stats — identique à la page prise */}
+            {/* Stats */}
             <View style={styles.statsCard}>
               <View style={styles.statItem}>
-                <Text style={styles.statLabel}>Plus gros</Text>
+                <Ionicons name="scale-outline" size={16} color="rgba(255,255,255,0.5)" />
                 <Text style={styles.statValue}>
                   {stats.maxWeight !== null ? `${Number(stats.maxWeight.toFixed(2))} kg` : '—'}
                 </Text>
+                <Text style={styles.statLabel}>Plus gros</Text>
               </View>
+              <View style={styles.statDivider} />
               <View style={styles.statItem}>
-                <Text style={styles.statLabel}>Total prises</Text>
+                <Ionicons name="fish-outline" size={16} color="rgba(255,255,255,0.5)" />
                 <Text style={styles.statValue}>{stats.total}</Text>
+                <Text style={styles.statLabel}>Total prises</Text>
               </View>
+              <View style={styles.statDivider} />
               <View style={styles.statItem}>
-                <Text style={styles.statLabel}>Plus long</Text>
+                <Ionicons name="resize-outline" size={16} color="rgba(255,255,255,0.5)" />
                 <Text style={styles.statValue}>
                   {stats.maxLength !== null ? `${Math.round(stats.maxLength)} cm` : '—'}
                 </Text>
+                <Text style={styles.statLabel}>Plus long</Text>
               </View>
             </View>
 
             {/* Tabs */}
             <View style={styles.tabBar}>
-              <Pressable onPress={() => setActiveTab('infos')} style={styles.tabItem}>
+              <Pressable
+                onPress={() => setActiveTab('infos')}
+                style={[styles.tabItem, activeTab === 'infos' && styles.tabItemActive]}
+              >
+                <Ionicons
+                  name="information-circle-outline"
+                  size={15}
+                  color={activeTab === 'infos' ? '#0F172A' : '#94A3B8'}
+                  style={{ marginRight: 5 }}
+                />
                 <Text style={[styles.tabText, activeTab === 'infos' && styles.tabTextActive]}>Infos</Text>
-                {activeTab === 'infos' && <View style={styles.tabUnderline} />}
               </Pressable>
-              <Pressable onPress={() => setActiveTab('catches')} style={styles.tabItem}>
+              <Pressable
+                onPress={() => setActiveTab('catches')}
+                style={[styles.tabItem, activeTab === 'catches' && styles.tabItemActive]}
+              >
+                <Ionicons
+                  name="fish-outline"
+                  size={15}
+                  color={activeTab === 'catches' ? '#0F172A' : '#94A3B8'}
+                  style={{ marginRight: 5 }}
+                />
                 <Text style={[styles.tabText, activeTab === 'catches' && styles.tabTextActive]}>Mes prises</Text>
-                {activeTab === 'catches' && <View style={styles.tabUnderline} />}
               </Pressable>
             </View>
 
@@ -410,7 +431,10 @@ export default function SpeciesDetailScreen() {
                 {/* Fiche espèce */}
                 {(enName || region || season || methods || baits) && (
                   <View style={styles.section}>
-                    <Text style={styles.sectionLabel}>Fiche espèce</Text>
+                    <View style={styles.sectionLabelRow}>
+                      <View style={styles.sectionLabelAccent} />
+                      <Text style={styles.sectionLabel}>Fiche espèce</Text>
+                    </View>
                     <View style={styles.infoCard}>
                       {enName && (
                         <InfoRow icon="language-outline" label="Nom anglais" value={String(enName)} />
@@ -433,7 +457,10 @@ export default function SpeciesDetailScreen() {
 
                 {/* Zones de présence */}
                 <View style={styles.section}>
-                  <Text style={styles.sectionLabel}>Zones de présence</Text>
+                  <View style={styles.sectionLabelRow}>
+                    <View style={styles.sectionLabelAccent} />
+                    <Text style={styles.sectionLabel}>Zones de présence</Text>
+                  </View>
                   <WorldMiniMap tags={regionTags} height={140} />
                   {regionTags.length > 0 && (
                     <View style={styles.tagRow}>
@@ -528,116 +555,129 @@ function SpeciesDetailSkeleton() {
 
 const styles = StyleSheet.create({
   center: { alignItems: 'center', justifyContent: 'center' },
-  cover: { height: '100%', width: '100%', backgroundColor: '#DBEAFE' },
+  cover: { height: '100%', width: '100%', backgroundColor: '#0F172A' },
   coverPlaceholder: { alignItems: 'center', justifyContent: 'center' },
   backBtn: {
     position: 'absolute',
     top: 12,
     left: 12,
-    height: 36,
-    width: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.9)',
+    height: 40,
+    width: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.92)',
     zIndex: 2,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 5,
   },
 
   // Titre
-  titleRow: { flexDirection: 'row', alignItems: 'baseline', flexWrap: 'wrap', gap: 10 },
-  titleText: { marginRight: 4 },
-  latinName: { fontSize: 15, color: '#6b7280', fontStyle: 'italic' },
+  titleSection: { gap: 3 },
+  titleText: {},
+  latinName: { fontSize: 14, color: '#94A3B8', fontStyle: 'italic', fontWeight: '400' },
 
-  // Stats — même style que catches/[id].tsx
+  // Stats — dark card
   statsCard: {
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    backgroundColor: '#f7f9fb',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#dfe7ef',
+    paddingVertical: 18,
+    paddingHorizontal: 8,
+    borderRadius: 18,
+    backgroundColor: '#0F172A',
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'space-around',
+    alignItems: 'center',
   },
-  statItem: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  statLabel: { fontSize: 12, color: '#6b7280' },
-  statValue: { fontSize: 18, fontWeight: '700', marginTop: 2 },
+  statItem: { flex: 1, alignItems: 'center', gap: 4 },
+  statDivider: { width: 1, height: 40, backgroundColor: 'rgba(255,255,255,0.12)' },
+  statLabel: { fontSize: 10, color: 'rgba(255,255,255,0.5)', fontWeight: '600', letterSpacing: 0.4, textTransform: 'uppercase' },
+  statValue: { fontSize: 20, fontWeight: '800', color: '#FFFFFF', lineHeight: 24 },
 
-  // Tabs
+  // Tabs — segmented control
   tabBar: {
     flexDirection: 'row',
-    borderBottomWidth: 1.5,
-    borderBottomColor: '#E5E7EB',
+    backgroundColor: '#F1F5F9',
+    borderRadius: 14,
+    padding: 4,
+    gap: 4,
   },
   tabItem: {
-    paddingBottom: 10,
-    paddingRight: 20,
-    position: 'relative',
+    flex: 1,
+    flexDirection: 'row',
+    paddingVertical: 10,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  tabText: { fontWeight: '600', color: '#6b7280', fontSize: 15 },
-  tabTextActive: { color: '#1E3A8A' },
-  tabUnderline: {
-    position: 'absolute',
-    bottom: -1.5,
-    left: 0,
-    right: 0,
-    height: 2.5,
-    borderRadius: 2,
-    backgroundColor: '#1E3A8A',
+  tabItemActive: {
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#0F172A',
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
   },
+  tabText: { fontWeight: '600', color: '#94A3B8', fontSize: 14 },
+  tabTextActive: { color: '#0F172A', fontWeight: '700' },
 
-  // Sections — même style que catches/[id].tsx
-  section: { gap: 8 },
-  sectionLabel: { fontWeight: '600', fontSize: 16 },
-  emptyText: { fontSize: 14, color: '#6b7280', marginTop: 4 },
+  // Sections
+  section: { gap: 10 },
+  sectionLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  sectionLabelAccent: { width: 3, height: 14, borderRadius: 2, backgroundColor: '#2563EB' },
+  sectionLabel: { fontWeight: '700', fontSize: 12, color: '#475569', textTransform: 'uppercase', letterSpacing: 0.7 },
+  emptyText: { fontSize: 14, color: '#94A3B8', marginTop: 4, textAlign: 'center', paddingVertical: 24 },
 
   // Info card
   infoCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#BFDBFE',
+    borderColor: '#E2E8F0',
     paddingHorizontal: 16,
     shadowColor: '#1E3A8A',
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
     elevation: 2,
   },
   infoRow: {
     flexDirection: 'row',
     gap: 12,
     alignItems: 'flex-start',
-    paddingVertical: 10,
+    paddingVertical: 12,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderColor: '#DBEAFE',
+    borderColor: '#F1F5F9',
   },
   infoRowIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#DBEAFE',
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: '#EFF6FF',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 2,
+    marginTop: 1,
   },
-  infoLabel: { fontSize: 12, color: '#1E40AF', fontWeight: '600' },
-  infoValue: { fontSize: 15, color: '#0F172A', marginTop: 2 },
+  infoLabel: { fontSize: 11, color: '#3B82F6', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.3 },
+  infoValue: { fontSize: 14, color: '#0F172A', marginTop: 3, lineHeight: 20 },
 
   // Tags
-  tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 2 },
   tag: {
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: 5,
     borderRadius: 999,
-    backgroundColor: '#E0ECFF',
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
   },
-  tagText: { fontSize: 12, color: '#1E3A8A', fontWeight: '600' },
+  tagText: { fontSize: 11, color: '#1D4ED8', fontWeight: '700' },
 
   // Modal
   imageModalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.9)',
+    backgroundColor: 'rgba(0,0,0,0.92)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -646,11 +686,13 @@ const styles = StyleSheet.create({
   imageModalImage: { width: '100%', height: '100%', borderRadius: 0, backgroundColor: '#000' },
   imageModalClose: {
     position: 'absolute',
-    top: 40,
-    right: 24,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    borderRadius: 20,
-    padding: 6,
+    top: 48,
+    right: 20,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 22,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)',
   },
 });
 
@@ -730,27 +772,36 @@ const catchStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    paddingVertical: 10,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderColor: '#E5E7EB',
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    backgroundColor: '#FFFFFF',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#E2E8F0',
+    marginBottom: 8,
+    shadowColor: '#0F172A',
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
   },
   thumb: {
-    width: 52,
-    height: 52,
-    borderRadius: 10,
-    backgroundColor: '#F3F4F6',
+    width: 58,
+    height: 58,
+    borderRadius: 12,
+    backgroundColor: '#F1F5F9',
   },
   thumbPlaceholder: {
-    width: 52,
-    height: 52,
-    borderRadius: 10,
-    backgroundColor: '#F3F4F6',
+    width: 58,
+    height: 58,
+    borderRadius: 12,
+    backgroundColor: '#F1F5F9',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  date: { fontSize: 14, fontWeight: '600', color: '#0F172A' },
-  meta: { fontSize: 13, color: '#6B7280', marginTop: 2 },
-  notes: { fontSize: 12, color: '#9CA3AF', marginTop: 2 },
+  date: { fontSize: 14, fontWeight: '700', color: '#0F172A' },
+  meta: { fontSize: 12, color: '#64748B', marginTop: 3, fontWeight: '500' },
+  notes: { fontSize: 12, color: '#94A3B8', marginTop: 2 },
 });
 
 // ── InfoRow ───────────────────────────────────────────────────────────────────

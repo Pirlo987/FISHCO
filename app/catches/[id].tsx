@@ -9,7 +9,6 @@ import ParallaxScrollView from '@/components/ParallaxScrollView';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase';
 import { ThemedText } from '@/components/ThemedText';
-import WorldMiniMap from '@/components/WorldMiniMap';
 import { normalizeName } from '@/constants/species';
 import { useLanguage } from '@/providers/LanguageProvider';
 
@@ -22,8 +21,9 @@ type CatchItem = {
   notes: string | null;
   caught_at: string;
   photo_path: string | null;
-  // Optionnel: si un jour on ajoute la région/zone
   region?: string | null;
+  title?: string | null;
+  description?: string | null;
 };
 
 export default function CatchDetailScreen() {
@@ -39,6 +39,7 @@ export default function CatchDetailScreen() {
   const [photoUrl, setPhotoUrl] = React.useState<string | null>(null);
   const [imagePreviewVisible, setImagePreviewVisible] = React.useState(false);
   const [imageSize, setImageSize] = React.useState<{ width: number; height: number } | null>(null);
+  const [latinName, setLatinName] = React.useState<string | null>(null);
 
   const urlFromPhotoPath = React.useCallback(async (path?: string | null) => {
     if (!path) return null;
@@ -104,6 +105,25 @@ export default function CatchDetailScreen() {
     return x >= left && x <= left + displayWidth && y >= top && y <= top + displayHeight;
   }, [imageSize, screenWidth, screenHeight]);
 
+  React.useEffect(() => {
+    if (!item?.species) return;
+    let cancelled = false;
+    (async () => {
+      const safe = item.species.replace(/'/g, "''");
+      const { data } = await supabase
+        .from('species')
+        .select('latin_name, name, french_name')
+        .or(`name.ilike.%${safe}%,french_name.ilike.%${safe}%`)
+        .limit(5);
+      if (cancelled || !Array.isArray(data) || !data.length) return;
+      const want = normalizeName(item.species);
+      const match = data.find((r: any) => normalizeName(r.name || r.french_name || '') === want) ?? data[0];
+      const latin = (match as any)?.latin_name ?? null;
+      if (!cancelled && latin) setLatinName(String(latin));
+    })();
+    return () => { cancelled = true; };
+  }, [item?.species]);
+
   const goToSpecies = React.useCallback(() => {
     if (!item?.species) return;
     const key = normalizeName(item.species);
@@ -142,39 +162,84 @@ export default function CatchDetailScreen() {
             </Pressable>
           </View>
         }>
-        <View style={styles.titleRow}>
-          <Pressable onPress={goToSpecies} hitSlop={8}>
-            <Text style={styles.titleText}>{item.species}</Text>
-          </Pressable>
+        {/* En-tête : espèce + nom latin + date + lien fiche */}
+        <View style={styles.headerSection}>
+          <View style={styles.speciesRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.titleText}>{item.species}</Text>
+              {latinName ? <Text style={styles.latinName}>{latinName}</Text> : null}
+            </View>
+            {item.species ? (
+              <Pressable onPress={goToSpecies} hitSlop={8} style={styles.speciesLinkBadge}>
+                <Text style={styles.speciesLinkText}>Fiche</Text>
+                <Ionicons name="chevron-forward" size={11} color="#2563EB" />
+              </Pressable>
+            ) : null}
+          </View>
+          <View style={styles.dateRow}>
+            <Ionicons name="calendar-outline" size={13} color="#94A3B8" />
+            <Text style={styles.dateText}>
+              {new Date(item.caught_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
+            </Text>
+          </View>
         </View>
 
+        {/* Stats poids + taille */}
         <View style={styles.statsCard}>
           <View style={styles.statItem}>
+            <Ionicons name="scale-outline" size={16} color="rgba(255,255,255,0.5)" />
+            <Text style={styles.statValue}>
+              {item.weight_kg ? `${Number(item.weight_kg.toFixed(2))} kg` : '—'}
+            </Text>
             <Text style={styles.statLabel}>{t('catch_weight')}</Text>
-            <Text style={styles.statValue}>{item.weight_kg ? `${Number(item.weight_kg.toFixed(2))} kg` : '—'}</Text>
           </View>
+          <View style={styles.statDivider} />
           <View style={styles.statItem}>
+            <Ionicons name="resize-outline" size={16} color="rgba(255,255,255,0.5)" />
+            <Text style={styles.statValue}>
+              {item.length_cm ? `${Math.round(item.length_cm)} cm` : '—'}
+            </Text>
             <Text style={styles.statLabel}>{t('catch_size')}</Text>
-            <Text style={styles.statValue}>{item.length_cm ? `${Math.round(item.length_cm)} cm` : '—'}</Text>
-          </View>
-          <View style={styles.statItem}>
-            <Text style={styles.statLabel}>{t('catch_date')}</Text>
-            <Text style={styles.statValueSmall}>{new Date(item.caught_at).toLocaleDateString()}</Text>
           </View>
         </View>
 
-        {item.notes ? (
-          <View style={styles.section}>
-            <Text style={styles.sectionLabel}>{t('catch_lure')}</Text>
-            <Text style={styles.sectionText}>{item.notes}</Text>
+        {/* Titre & description du post */}
+        {(item.title || item.description) ? (
+          <View style={styles.infoCard}>
+            <View style={styles.infoCardHeader}>
+              <View style={[styles.infoCardIcon, { backgroundColor: '#F5F3FF' }]}>
+                <Ionicons name="chatbubble-ellipses-outline" size={16} color="#7C3AED" />
+              </View>
+              <Text style={styles.infoCardTitle}>Publication</Text>
+            </View>
+            {item.title ? <Text style={styles.postTitle}>{item.title}</Text> : null}
+            {item.description ? <Text style={styles.infoCardText}>{item.description}</Text> : null}
           </View>
         ) : null}
 
+        {/* Leurre / Notes */}
+        {item.notes ? (
+          <View style={styles.infoCard}>
+            <View style={styles.infoCardHeader}>
+              <View style={[styles.infoCardIcon, { backgroundColor: '#F0FDF4' }]}>
+                <Ionicons name="leaf-outline" size={16} color="#16A34A" />
+              </View>
+              <Text style={styles.infoCardTitle}>{t('catch_lure')}</Text>
+            </View>
+            <Text style={styles.infoCardText}>{item.notes}</Text>
+          </View>
+        ) : null}
+
+        {/* Zone de pêche */}
         {item.region ? (
-          <View style={styles.section}>
-            <Text style={styles.sectionLabel}>{t('catch_location')}</Text>
-            <Text style={styles.sectionText}>{item.region}</Text>
-            <WorldMiniMap tags={[item.region]} height={140} />
+          <View style={styles.infoCard}>
+            <View style={styles.infoCardHeader}>
+              <View style={[styles.infoCardIcon, { backgroundColor: '#EFF6FF' }]}>
+                <Ionicons name="location-outline" size={16} color="#2563EB" />
+              </View>
+              <Text style={styles.infoCardTitle}>{t('catch_location')}</Text>
+            </View>
+            <Text style={styles.infoCardText}>{item.region}</Text>
           </View>
         ) : null}
       </ParallaxScrollView>
@@ -231,45 +296,90 @@ function CatchDetailSkeleton() {
 
 const styles = StyleSheet.create({
   center: { alignItems: 'center', justifyContent: 'center' },
-  cover: { height: '100%', width: '100%', backgroundColor: '#f1f1f1' },
+  cover: { height: '100%', width: '100%', backgroundColor: '#0F172A' },
   coverPlaceholder: { alignItems: 'center', justifyContent: 'center' },
-  titleRow: { flexDirection: 'row', alignItems: 'baseline', gap: 10, marginBottom: 8 },
-  titleText: { fontSize: 24, fontWeight: '700' },
-  metaText: { fontSize: 14, color: '#666' },
-  statsCard: {
-    marginTop: 8,
-    marginBottom: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    backgroundColor: '#f7f9fb',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#dfe7ef',
+
+  // Header
+  headerSection: { gap: 6 },
+  speciesRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+  titleText: { fontSize: 26, fontWeight: '800', color: '#0F172A', flex: 1 },
+  speciesLinkBadge: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 2,
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
   },
-  statItem: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  statLabel: { fontSize: 12, color: '#6b7280' },
-  statValue: { fontSize: 18, fontWeight: '700', marginTop: 2 },
-  statValueSmall: { fontSize: 16, fontWeight: '600', marginTop: 2 },
+  latinName: { fontSize: 13, color: '#94A3B8', fontStyle: 'italic', fontWeight: '400', marginTop: 1 },
+  speciesLinkText: { fontSize: 12, color: '#2563EB', fontWeight: '700' },
+  dateRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  dateText: { fontSize: 13, color: '#64748B', fontWeight: '500' },
+
+  // Stats — dark card
+  statsCard: {
+    paddingVertical: 18,
+    paddingHorizontal: 8,
+    borderRadius: 18,
+    backgroundColor: '#0F172A',
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+  },
+  statItem: { flex: 1, alignItems: 'center', gap: 4 },
+  statDivider: { width: 1, height: 40, backgroundColor: 'rgba(255,255,255,0.12)' },
+  statLabel: { fontSize: 10, color: 'rgba(255,255,255,0.5)', fontWeight: '600', letterSpacing: 0.4, textTransform: 'uppercase' },
+  statValue: { fontSize: 22, fontWeight: '800', color: '#FFFFFF', lineHeight: 26 },
+
+  // Info cards
+  infoCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#E2E8F0',
+    padding: 16,
+    gap: 10,
+    shadowColor: '#0F172A',
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
+  },
+  infoCardHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  infoCardIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  infoCardTitle: { fontSize: 11, fontWeight: '700', color: '#475569', textTransform: 'uppercase', letterSpacing: 0.5 },
+  infoCardText: { fontSize: 15, color: '#0F172A', lineHeight: 22 },
+  postTitle: { fontSize: 16, fontWeight: '700', color: '#0F172A' },
+
   backBtn: {
     position: 'absolute',
     top: 12,
     left: 12,
-    height: 36,
-    width: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.9)',
+    height: 40,
+    width: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.92)',
     zIndex: 2,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 5,
   },
-  section: { marginTop: 16, gap: 8 },
-  sectionLabel: { fontWeight: '600', fontSize: 16 },
-  sectionText: { fontSize: 16, color: '#222' },
   imageModalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.9)',
+    backgroundColor: 'rgba(0,0,0,0.92)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -278,10 +388,12 @@ const styles = StyleSheet.create({
   imageModalImage: { width: '100%', height: '100%', borderRadius: 0, backgroundColor: '#000' },
   imageModalClose: {
     position: 'absolute',
-    top: 40,
-    right: 24,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    borderRadius: 20,
-    padding: 6,
+    top: 48,
+    right: 20,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 22,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)',
   },
 });
