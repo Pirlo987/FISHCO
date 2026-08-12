@@ -25,7 +25,6 @@
         "foregroundImage": "./assets/images/logo-app.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true,
       "package": "com.fishbook.app",
       "versionCode": 1,
       "permissions": [
@@ -60,10 +59,9 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/logo-app.png",
-          "imageWidth": 200,
-          "resizeMode": "contain",
-          "backgroundColor": "#ffffff"
+          "image": "./assets/images/waiting-screen.png",
+          "resizeMode": "cover",
+          "backgroundColor": "#1478F7"
         }
       ],
       "expo-web-browser",
@@ -124,7 +122,6 @@
         "projectId": "8f3118c2-50ed-48f3-9883-8b2618fc39b0"
       }
     },
-    "owner": "brieuc931",
-    "privacy": "https://brieuc931.github.io/fishco/privacy.html"
+    "owner": "brieuc931"
   }
 }
